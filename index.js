@@ -6,7 +6,6 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { connectDB } from './src/config/db.config.js';
 import authRoutes from './src/routes/auth.routes.js';
-import Redis from 'ioredis';
 import passport from './src/config/passport.config.js';
 
 
@@ -23,6 +22,7 @@ app.use(
     max: 100, // Limit each IP to 100 requests per window
   })
 );
+app.use(passport.initialize());
 
 
 const PORT = process.env.PORT || 6000;
