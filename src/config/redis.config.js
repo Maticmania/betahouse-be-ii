@@ -1,11 +1,11 @@
+// src/config/redis.js
 import Redis from 'ioredis';
+import dotenv from 'dotenv';
 
-export const redisConnect = (url) => {
-  const redis = new Redis(url); // No tls:{} now
+dotenv.config();
 
-  redis.on('connect', () => console.log('✅ Redis connected'));
-  redis.on('error', (err) => console.error('❌ Redis error:', err));
+const redisClient = new Redis(process.env.REDIS_URL);
+redisClient.on('error', (err) => console.error('❌Redis error:', err));
+redisClient.on('connect', () => console.log('✅Redis connected'));
 
-  return redis;
-};
-
+export default redisClient;

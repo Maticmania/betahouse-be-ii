@@ -1,13 +1,14 @@
+import './src/config/env.js';
 import express from 'express';
-import dotenv from 'dotenv';
 import cors from 'cors';
 import morgan from 'morgan';
 import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import { connectDB } from './src/config/db.config.js';
-import { redisConnect } from './src/config/redis.config.js';
 import authRoutes from './src/routes/auth.routes.js';
+import Redis from 'ioredis';
+import passport from './src/config/passport.config.js';
 
-dotenv.config();
 
 const app = express();
 
@@ -16,17 +17,19 @@ app.use(express.json());
 app.use(cors());
 app.use(morgan('dev'));
 app.use(helmet());
-// app.use(express.urlencoded({ extended: true }));
+app.use(
+  rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // Limit each IP to 100 requests per window
+  })
+);
 
 
 const PORT = process.env.PORT || 6000;
 const MONGO_URI = process.env.MONGO_URI;
-const REDIS_URL = process.env.REDIS_URL;
 
 // mongoDB connection
 connectDB(MONGO_URI);
-// redis connection
-redisConnect(REDIS_URL);
 
 // Sample route
 app.get('/', (req, res) => {
