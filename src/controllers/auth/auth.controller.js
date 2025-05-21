@@ -2,7 +2,7 @@
 import User from '../../models/User.js';
 import Session from '../../models/Session.js';
 import { hashPassword, comparePassword, generateToken, blacklistToken } from '../../utils/auth.js';
-import { sendVerificationEmail } from '../../service/email.js';
+import { sendVerificationEmail } from '../../services/email.js';
 import { v4 as uuidv4 } from 'uuid';
 import passport from '../../config/passport.config.js';
 

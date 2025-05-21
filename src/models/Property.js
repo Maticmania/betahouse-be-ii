@@ -1,4 +1,3 @@
-// src/models/Property.js
 import mongoose from 'mongoose';
 
 const PropertySchema = new mongoose.Schema({
@@ -10,6 +9,45 @@ const PropertySchema = new mongoose.Schema({
   description: {
     type: String,
     required: true,
+  },
+  details: {
+    bedrooms: { type: Number, default: 0 },
+    bathrooms: { type: Number, default: 0 },
+    area: {
+      totalStructure: { type: Number, default: 0 }, // Fixed
+      totalInterior: { type: Number, default: 0 },
+    },
+    kitchen: {
+      count: { type: Number, default: 1 },
+      features: [{ type: String }],
+    },
+    heating: {
+      type: [{ type: String }],
+      features: [{ type: String }],
+    },
+    appliances: {
+      included: [{ type: String }],
+    },
+    basement: {
+      type: String,
+      // enum: ['none', 'full', 'partially finished', 'unfinished'],
+      default: 'none',
+    },
+    fireplace: { type: Boolean, default: false },
+  },
+  status: {
+    type: String,
+    enum: ['available', 'sold', 'rented', 'pending', 'rejected', 'archived'],
+    default: 'pending',
+  },
+  priceType: {
+    type: String,
+    enum: ['yearly', 'total'],
+    default: 'total',
+  },
+  forSale: {
+    type: Boolean,
+    default: true,
   },
   price: {
     type: Number,
@@ -23,15 +61,16 @@ const PropertySchema = new mongoose.Schema({
       lat: Number,
       lng: Number,
     },
+    frontageLength: { type: Number },
   },
   propertyType: {
     type: String,
-    enum: ['apartment', 'house', 'condo', 'land'],
+    // enum: ['apartment', 'house', 'condo', 'land', 'single-family', 'bungalow'],
     required: true,
   },
-  features: [{ type: String }], // e.g., ["pool", "garage"]
-  images: [{ type: String }], // Cloudinary URLs
-  thumbnail: { type: String }, // Cloudinary URL
+  features: [{ type: String }],
+  images: [{ type: String }],
+  thumbnail: { type: String },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -40,6 +79,37 @@ const PropertySchema = new mongoose.Schema({
   createdAt: {
     type: Date,
     default: Date.now,
+  },
+  views: {
+    type: Number,
+    default: 0,
+  },
+  savedCount: {
+    type: Number,
+    default: 0,
+  },
+  isFeatured: {
+    type: Boolean,
+    default: false,
+  },
+  parking: {
+    totalSpaces: { type: Number, default: 0 },
+    features: [{ type: String }],
+    attachedGarageSpaces: { type: Number, default: 0 },
+    uncoveredSpaces: { type: Boolean, default: false },
+    parkingSize: { type: String },
+  },
+  lot: {
+    size: { type: Number },
+    dimensions: { type: String },
+    features: [{ type: String }],
+  },
+  construction: {
+    type: { type: String },
+    style: { type: String },
+    materials: [{ type: String }],
+    roof: [{ type: String }],
+    yearBuilt: { type: Number },
   },
 });
 

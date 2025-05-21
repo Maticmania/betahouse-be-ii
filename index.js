@@ -5,8 +5,11 @@ import morgan from 'morgan';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { connectDB } from './src/config/db.config.js';
-import authRoutes from './src/routes/auth.routes.js';
 import passport from './src/config/passport.config.js';
+import authRoutes from './src/routes/auth.routes.js';
+import notificationRoutes from './src/routes/notification.js';
+import propertyRoutes from './src/routes/property.js';
+
 
 
 const app = express();
@@ -38,6 +41,8 @@ app.get('/', (req, res) => {
 
 // Routes
 app.use('/api/v2/auth', authRoutes);
+app.use('/api/v2/properties', propertyRoutes);
+app.use('/api/v2/notifications', notificationRoutes);
 
 // Start server
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
