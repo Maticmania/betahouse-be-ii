@@ -47,6 +47,27 @@ const verifyEmail = async (req, res) => {
   }
 };
 
+// verify phone number(update this later, cos you need firebse to verify the number )
+const verifyPhone = async (req, res) => {
+  const { phone } = req.body
+  try {
+    const user = await User.findOneAndUpdate(
+      { phone },
+      { phoneVerified: true },
+      { new: true }
+    );
+
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    res.status(200).json({ message: 'Phone verified', user });
+    
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+    
+  }
+}
+
+
 const login = async (req, res) => {
   const { email, password } = req.body;
   try {
