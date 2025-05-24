@@ -3,75 +3,119 @@ import redisClient from '../config/redis.config.js';
 import { sendNotificationEmail } from './email.js';
 import User from '../models/User.js';
 
-const createNotification = async (userId, type, content, relatedId = null) => {
+/**
+ * Scans Redis keys with a match pattern
+ */
+const scanKeys = async (pattern) => {
+  let cursor = '0';
+  const keys = [];
+
+  do {
+    const [nextCursor, batchKeys] = await redisClient.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+    cursor = nextCursor;
+    keys.push(...batchKeys);
+  } while (cursor !== '0');
+
+  return keys;
+};
+
+/**
+ * Creates a notification and caches it
+ */
+export const createNotification = async (userId, type, content, relatedId = null) => {
   try {
-    const notification = new Notification({
+    const notification = await new Notification({
       user: userId,
       type,
       content,
       relatedId,
-    });
-    await notification.save();
+    }).save();
 
-    // Cache notifications for 24 hours
+    // Cache notification
     await redisClient.set(
-    `notifications:${userId}:${notification._id}`,
-    JSON.stringify(notification),
-    'EX',
-    24 * 60 * 60 // 24 hours in seconds
+      `notifications:${userId}:${notification._id}`,
+      JSON.stringify(notification),
+      'EX',
+      24 * 60 * 60
     );
 
-    // Send email notification
-    const user = await User.findById(userId);
-    await sendNotificationEmail(user.email, type.replace('_', ' ').toUpperCase(), content);
-  } catch (error) {
-    console.error('Notification creation error:', error);
-  }
-};
-
-const getNotifications = async (userId, page = 1, limit = 10) => {
-  try {
-    // Check Redis cache first
-    const cachedNotifications = await redisClient.keys(`notifications:${userId}:*`);
-    let notifications = [];
-
-    if (cachedNotifications.length > 0) {
-      notifications = await Promise.all(
-        cachedNotifications.map(async (key) => JSON.parse(await redisClient.get(key)))
+    // Email user
+    const user = await User.findById(userId).lean();
+    if (user?.email) {
+      await sendNotificationEmail(
+        user.email,
+        type.replace(/_/g, ' ').toUpperCase(),
+        content
       );
     }
 
-    // If cache is incomplete, fetch from MongoDB
-    if (notifications.length < limit) {
-      notifications = await Notification.find({ user: userId })
-        .sort({ createdAt: -1 })
-        .skip((page - 1) * limit)
-        .limit(Number(limit))
-        .lean();
+    return notification;
+  } catch (error) {
+    console.error('Notification creation error:', error);
+    throw new Error('Failed to create notification');
+  }
+};
 
-      // Update cache
-      for (const notification of notifications) {
-        await redisClient.setEx(
-          `notifications:${userId}:${notification._id}`,
-          24 * 60 * 60,
-          JSON.stringify(notification)
-        );
-      }
+/**
+ * Gets notifications from cache or MongoDB
+ */
+export const getNotifications = async (userId, page = 1, limit = 10) => {
+  try {
+    const keys = await scanKeys(`notifications:${userId}:*`);
+    let notifications = [];
+
+    if (keys.length) {
+      const raw = await Promise.all(keys.map((k) => redisClient.get(k)));
+      notifications = raw
+        .filter(Boolean)
+        .map((n) => JSON.parse(n))
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     }
 
     const total = await Notification.countDocuments({ user: userId });
+
+    // Fallback if Redis incomplete
+    if (notifications.length < limit) {
+      const skip = (page - 1) * limit;
+      const dbNotifications = await Notification.find({ user: userId })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(Number(limit))
+        .lean();
+
+      notifications = dbNotifications;
+
+      // Async cache update (non-blocking)
+      Promise.all(
+        dbNotifications.map((n) =>
+          redisClient.set(
+            `notifications:${userId}:${n._id}`,
+            JSON.stringify(n),
+            'EX',
+            24 * 60 * 60
+          )
+        )
+      );
+    }
+
+    // Paginate cached or DB results
+    const paginated = notifications.slice((page - 1) * limit, page * limit);
+
     return {
-      notifications,
+      notifications: paginated,
       total,
       page: Number(page),
       pages: Math.ceil(total / limit),
     };
-  } catch (error) {
-    throw new Error(`Failed to fetch notifications: ${error.message}`);
+  } catch (err) {
+    throw new Error(`Failed to fetch notifications: ${err.message}`);
   }
 };
 
-const markNotificationRead = async (userId, notificationId) => {
+/**
+ * Marks one notification as read
+ */
+export const markNotificationRead = async (userId, notificationId) => {
   try {
     const notification = await Notification.findOne({ _id: notificationId, user: userId });
     if (!notification) throw new Error('Notification not found');
@@ -79,15 +123,46 @@ const markNotificationRead = async (userId, notificationId) => {
     notification.read = true;
     await notification.save();
 
-    // Update cache
-    await redisClient.setEx(
+    await redisClient.set(
       `notifications:${userId}:${notification._id}`,
-      24 * 60 * 60,
-      JSON.stringify(notification)
+      JSON.stringify(notification),
+      'EX',
+      24 * 60 * 60
     );
-  } catch (error) {
-    throw new Error(`Failed to mark notification read: ${error.message}`);
+
+    return notification;
+  } catch (err) {
+    throw new Error(`Failed to mark notification read: ${err.message}`);
   }
 };
 
-export { createNotification, getNotifications, markNotificationRead };
+/**
+ * Marks all notifications as read for a user
+ */
+export const markAllNotificationsRead = async (userId) => {
+  try {
+    const result = await Notification.updateMany(
+      { user: userId, read: false },
+      { $set: { read: true } }
+    );
+
+    // Async update in Redis
+    const keys = await scanKeys(`notifications:${userId}:*`);
+    await Promise.all(
+      keys.map(async (key) => {
+        const raw = await redisClient.get(key);
+        if (raw) {
+          const data = JSON.parse(raw);
+          if (!data.read) {
+            data.read = true;
+            await redisClient.set(key, JSON.stringify(data), 'EX', 24 * 60 * 60);
+          }
+        }
+      })
+    );
+
+    return { updated: result.modifiedCount };
+  } catch (err) {
+    throw new Error(`Failed to mark all notifications read: ${err.message}`);
+  }
+};

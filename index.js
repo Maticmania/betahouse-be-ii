@@ -10,6 +10,7 @@ import authRoutes from './src/routes/auth.routes.js';
 import notificationRoutes from './src/routes/notification.js';
 import propertyRoutes from './src/routes/property.js';
 import agentRoutes from './src/routes/agent.js';
+import userRoutes from './src/routes/user.js';
 
 
 
@@ -46,6 +47,7 @@ app.use('/api/v2/auth', authRoutes);
 app.use('/api/v2/properties', propertyRoutes);
 app.use('/api/v2/notifications', notificationRoutes);
 app.use('/api/v2/agent', agentRoutes);
+app.use('/api/v2/user', userRoutes);
 
 // Start server
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

@@ -25,7 +25,6 @@ router.post(
   upload.fields([
     { name: 'idImage', maxCount: 1 },
     { name: 'selfieWithCode', maxCount: 1 },
-    { name: 'voice', maxCount: 1 },
   ]),
   submitKYC
 );

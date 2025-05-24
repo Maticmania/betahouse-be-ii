@@ -16,8 +16,8 @@ const submitKYC = async (req, res) => {
       return res.status(400).json({ message: 'KYC already submitted' });
     }
 
-    const { fullName, phone, address, idType, idNumber } = req.body;
-    const { idImage, selfieWithCode, voice } = req.files || {};
+    const { fullName, phone, address, idType, idNumber, verificationCode} = req.body;
+    const { idImage, selfieWithCode } = req.files || {};
 
     // Validate file uploads
     if (!idImage || !selfieWithCode) {
@@ -33,16 +33,6 @@ const submitKYC = async (req, res) => {
       folder: 'real-estate/kyc/selfie',
     });
 
-    const voiceResult = voice
-      ? await cloudinary.uploader.upload(voice[0].path, {
-          folder: 'real-estate/kyc/voice',
-          resource_type: 'video',
-        })
-      : null;
-
-    // Generate verification code for selfie
-    const verificationCode = uuidv4().slice(0, 8);
-
     const kyc = new AgentKYC({
       user: req.user._id,
       fullName,
@@ -52,7 +42,6 @@ const submitKYC = async (req, res) => {
       idNumber,
       idImage: idImageResult.secure_url,
       selfieWithCode: selfieResult.secure_url,
-      voice: voiceResult ? voiceResult.secure_url : null,
       verificationCode,
     });
 
@@ -79,7 +68,7 @@ const submitKYC = async (req, res) => {
 const getKYCStatus = async (req, res) => {
   try {
     const kyc = await AgentKYC.findOne({ user: req.user._id }).select(
-      '-idImage -selfieWithCode -voice'
+      '-idImage -selfieWithCode'
     );
     if (!kyc) {
       return res.status(404).json({ message: 'No KYC submission found' });

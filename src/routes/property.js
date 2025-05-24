@@ -9,6 +9,7 @@ import {
   toggleWishlist,
   updatePropertyStatus,
   toggleFeatured,
+  listMyProperties,
 } from '../controllers/property/property.controller.js';
 import { authenticate, restrictTo } from '../middlewares/auth.middleware.js';
 import multer from 'multer';
@@ -31,9 +32,11 @@ router.post('/', authenticate, restrictTo('agent'), upload.array('images', 30), 
 router.put('/:id', authenticate, restrictTo('agent'), upload.array('images', 30), updateProperty);
 router.delete('/:id', authenticate, restrictTo('agent', 'admin'), deleteProperty);
 router.get('/', listProperties);
+router.get('/my', authenticate, restrictTo('agent', 'admin'), listMyProperties); // New route
 router.get('/:id', getProperty);
 router.post('/:id/wishlist', authenticate, restrictTo('user'), toggleWishlist);
 router.put('/:id/status', authenticate, restrictTo('admin'), updatePropertyStatus);
 router.put('/:id/featured', authenticate, restrictTo('admin'), toggleFeatured);
+
 
 export default router;

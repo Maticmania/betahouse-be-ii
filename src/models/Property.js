@@ -1,3 +1,4 @@
+// src/models/Property.js
 import mongoose from 'mongoose';
 
 const PropertySchema = new mongoose.Schema({
@@ -14,7 +15,7 @@ const PropertySchema = new mongoose.Schema({
     bedrooms: { type: Number, default: 0 },
     bathrooms: { type: Number, default: 0 },
     area: {
-      totalStructure: { type: Number, default: 0 }, // Fixed
+      totalStructure: { type: Number, default: 0 },
       totalInterior: { type: Number, default: 0 },
     },
     kitchen: {
@@ -37,7 +38,7 @@ const PropertySchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['available', 'sold', 'rented', 'pending', 'rejected', 'archived'],
+    // enum: ['available', 'sold', 'rented', 'pending'],
     default: 'pending',
   },
   priceType: {
@@ -69,7 +70,7 @@ const PropertySchema = new mongoose.Schema({
     required: true,
   },
   features: [{ type: String }],
-  images: [{ type: String }],
+  images: [{ type: String }], // Up to 30 Cloudinary URLs
   thumbnail: { type: String },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
@@ -111,6 +112,12 @@ const PropertySchema = new mongoose.Schema({
     roof: [{ type: String }],
     yearBuilt: { type: Number },
   },
+  virtualSchema: [
+    {
+      key: { type: String, required: true },
+      value: { type: mongoose.Schema.Types.Mixed, required: true }, // Flexible value type
+    },
+  ],
 });
 
 export default mongoose.model('Property', PropertySchema);

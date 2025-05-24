@@ -2,11 +2,24 @@
 import mongoose from 'mongoose';
 
 const UserSchema = new mongoose.Schema({
+  username: {
+    type: String,
+    required: true,
+    unique: true,
+    trim: true,
+    minlength: 3,
+    maxlength: 30,
+  },
   email: {
     type: String,
     required: true,
     unique: true,
     lowercase: true,
+    trim: true,
+  },
+  phone:{
+    type: String,
+    unique: true,
     trim: true,
   },
   password: {
@@ -30,18 +43,44 @@ const UserSchema = new mongoose.Schema({
     photo: { type: String }, // Cloudinary URL
     state: { type: String },
     country: { type: String },
-    phone: { type: String },
+    about: {
+      bio: { type: String }, // Detailed bio for agents
+      specialties: [{ type: String }], // e.g., ["Residential", "Commercial"]
+      credentials: [{ type: String }], // e.g., ["Licensed Realtor", "MBA"]
+    },
+    officeLocation: {
+      address: { type: String },
+      city: { type: String },
+      state: { type: String },
+      country: { type: String },
+      coordinates: {
+        lat: Number,
+        lng: Number,
+      },
+    },
   },
   preferences: {
     priceRange: { min: Number, max: Number },
-    propertyType: { type: [String], enum: ['apartment', 'house', 'condo', 'land'] },
-    features: { type: [String] }, // e.g., ["pool", "garage"]
+    propertyType: { type: [String], enum: ['apartment', 'house', 'condo', 'land', 'single-family', 'bungalow'] },
+    features: { type: [String] },
   },
   wishlist: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Property' }],
   role: {
     type: String,
     enum: ['user', 'agent', 'admin'],
     default: 'user',
+  },
+  ratings: {
+    average: { type: Number, default: 0 },
+    count: { type: Number, default: 0 },
+    reviews: [
+      {
+        user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        rating: { type: Number, min: 1, max: 5 },
+        comment: { type: String },
+        createdAt: { type: Date, default: Date.now },
+      },
+    ],
   },
   createdAt: {
     type: Date,

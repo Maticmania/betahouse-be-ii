@@ -49,20 +49,27 @@ const createProperty = async (req, res) => {
       return res.status(403).json({ message: 'Only agents can create properties' });
     }
 
-    const { title, description, price, priceType, forSale, location, propertyType, features, details, parking, lot, construction } = req.body;
+    const {
+      title,
+      description,
+      price,
+      priceType,
+      forSale,
+      location,
+      propertyType,
+      features,
+      details,
+      parking,
+      lot,
+      construction,
+      virtualSchema, // New field
+    } = req.body;
     const files = req.files || [];
 
-    // Validate required fields
-    if (!title || !description || !price || !location || !propertyType) {
-        return res.status(400).json({ message: 'Missing required fields' });
-    }
-
-    // Validate image count
     if (files.length > 30) {
       return res.status(400).json({ message: 'Maximum 30 images allowed' });
     }
 
-    // Upload images to Cloudinary
     const imageUrls = await Promise.all(
       files.map(async (file) => {
         const result = await cloudinary.uploader.upload(file.path, {
@@ -72,7 +79,6 @@ const createProperty = async (req, res) => {
       })
     );
 
-    // Set first image as thumbnail if provided
     const thumbnail = imageUrls[0] || '';
 
     const property = new Property({
@@ -88,6 +94,7 @@ const createProperty = async (req, res) => {
       parking,
       lot,
       construction,
+      virtualSchema: virtualSchema ? JSON.parse(virtualSchema) : [], // Parse JSON string
       images: imageUrls,
       thumbnail,
       createdBy: req.user._id,
@@ -95,13 +102,12 @@ const createProperty = async (req, res) => {
 
     await property.save();
 
-    // Notify admins
     const admins = await User.find({ role: 'admin' });
     for (const admin of admins) {
       await createNotification(
         admin._id,
         'property_submitted',
-        `New property "${title}" submitted by ${req.user.profile.name} for approval.`,
+        `New property "${title}" submitted by ${req.user.profile.name} (@${req.user.username}) for approval.`,
         property._id
       );
     }
@@ -126,15 +132,27 @@ const updateProperty = async (req, res) => {
       return res.status(403).json({ message: 'Not authorized to update this property' });
     }
 
-    const { title, description, price, priceType, forSale, location, propertyType, features, details, parking, lot, construction } = req.body;
+    const {
+      title,
+      description,
+      price,
+      priceType,
+      forSale,
+      location,
+      propertyType,
+      features,
+      details,
+      parking,
+      lot,
+      construction,
+      virtualSchema,
+    } = req.body;
     const files = req.files || [];
 
-    // Validate image count
     if (property.images.length + files.length > 30) {
       return res.status(400).json({ message: 'Maximum 30 images allowed' });
     }
 
-    // Upload new images
     const newImageUrls = files.length
       ? await Promise.all(
           files.map(async (file) => {
@@ -146,7 +164,6 @@ const updateProperty = async (req, res) => {
         )
       : [];
 
-    // Update fields
     property.title = title || property.title;
     property.description = description || property.description;
     property.price = price || property.price;
@@ -159,6 +176,7 @@ const updateProperty = async (req, res) => {
     property.parking = parking || property.parking;
     property.lot = lot || property.lot;
     property.construction = construction || property.construction;
+    property.virtualSchema = virtualSchema ? JSON.parse(virtualSchema) : property.virtualSchema;
     property.images = [...property.images, ...newImageUrls];
     property.thumbnail = property.thumbnail || newImageUrls[0] || '';
 
@@ -268,6 +286,39 @@ const listProperties = async (req, res) => {
     const total = properties.length;
     res.status(200).json({
       properties: paginatedProperties,
+      total,
+      page: Number(page),
+      pages: Math.ceil(total / limit),
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// List properties for agent/admin
+const listMyProperties = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, status } = req.query;
+
+    const query = {};
+    if (req.user.role === 'agent') {
+      query.createdBy = req.user._id; // Agents see only their properties
+    }
+    if (status) {
+      query.status = status; // Filter by status (pending, available, sold, rented)
+    }
+
+    const properties = await Property.find(query)
+      .populate('createdBy', 'profile.name username')
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(Number(limit))
+      .lean();
+
+    const total = await Property.countDocuments(query);
+
+    res.status(200).json({
+      properties,
       total,
       page: Number(page),
       pages: Math.ceil(total / limit),
@@ -431,4 +482,5 @@ export {
   toggleWishlist,
   updatePropertyStatus,
   toggleFeatured,
+  listMyProperties,
 };

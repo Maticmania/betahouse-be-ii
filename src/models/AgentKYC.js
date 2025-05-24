@@ -45,9 +45,6 @@ const AgentKYCSchema = new mongoose.Schema({
   verificationCode: {
     type: String, // Random code generated for selfie verification
   },
-  voice: {
-    type: String, // Cloudinary URL for optional voice recording
-  },
   status: {
     type: String,
     enum: ['pending', 'approved', 'rejected'],
