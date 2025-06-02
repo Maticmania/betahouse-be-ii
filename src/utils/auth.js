@@ -13,9 +13,11 @@ const comparePassword = async (password, hashedPassword) => {
 };
 
 const generateToken = (userId) => {
-  return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '7d' });
+  return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '1m' });
 };
-
+export const generateRefreshToken = (userId) => {
+  return jwt.sign({ userId }, process.env.JWT_REFRESH_SECRET, { expiresIn: "7d" });
+};
 const blacklistToken = async (token) => {
   const decoded = jwt.decode(token);
   const expiresIn = decoded.exp - Math.floor(Date.now() / 1000);
@@ -25,7 +27,17 @@ const blacklistToken = async (token) => {
 const verifyToken = async (token) => {
   const isBlacklisted = await redisClient.get(`blacklist:${token}`);
   if (isBlacklisted) throw new Error('Token is blacklisted');
-  return jwt.verify(token, process.env.JWT_SECRET);
+try {
+    // Try access token first
+    return jwt.verify(token, process.env.JWT_SECRET);
+  } catch (err) {
+    // If it fails, try refresh token
+    try {
+      return jwt.verify(token, process.env.JWT_REFRESH_SECRET);
+    } catch (refreshErr) {
+      throw new Error("Invalid or expired token");
+    }
+  }
 };
 
 export { hashPassword, comparePassword, generateToken, blacklistToken, verifyToken };

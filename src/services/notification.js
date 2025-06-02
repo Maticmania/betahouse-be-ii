@@ -166,3 +166,21 @@ export const markAllNotificationsRead = async (userId) => {
     throw new Error(`Failed to mark all notifications read: ${err.message}`);
   }
 };
+
+
+/**
+ * Deletes a notification
+ */
+export const deleteNotificationservice = async (userId, notificationId) => {
+  try {
+    const notification = await Notification.findOneAndDelete({ _id: notificationId, user: userId });
+    if (!notification) throw new Error('Notification not found');
+
+    // Remove from Redis cache
+    await redisClient.del(`notifications:${userId}:${notification._id}`);
+
+    return { message: 'Notification deleted successfully' };
+  } catch (err) {
+    throw new Error(`Failed to delete notification: ${err.message}`);
+  }
+}

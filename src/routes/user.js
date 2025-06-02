@@ -28,6 +28,6 @@ router.put('/:id', authenticate, upload.single('photo'), updateUser);
 router.delete('/:id', authenticate, restrictTo('admin'), deleteUser);
 router.post('/:agentId/review', authenticate, restrictTo('user'), addAgentReview);
 router.get('/:agentId/profile', getAgentProfile);
-router.get('/agents', getAllAgents); // New route to get all agents
+router.get('/agents', getAllAgents); 
 
 export default router;

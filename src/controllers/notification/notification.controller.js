@@ -1,5 +1,5 @@
 // src/api/notification/notification.controller.js
-import { getNotifications, markNotificationRead } from '../../services/notification.js';
+import { deleteNotificationservice, getNotifications, markAllNotificationsRead, markNotificationRead } from '../../services/notification.js';
 
 const getUserNotifications = async (req, res) => {
   try {
@@ -25,4 +25,25 @@ const markAsRead = async (req, res) => {
   }
 };
 
-export { getUserNotifications, markAsRead };
+const markAllNotifications = async (req, res) => {
+  try {
+    await markAllNotificationsRead(req.user._id);
+    res.status(200).json({ message: 'All notifications marked as read' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+const deleteNotification = async (req, res) => {
+  try {
+    const { notificationId } = req.params;
+    await deleteNotificationservice(req.user._id, notificationId);
+    res.status(200).json({ message: 'Notification deleted sucessfully' });  
+  }
+  catch (error) {
+    console.log('Error deleting notification:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+}
+
+export { getUserNotifications, markAsRead, markAllNotifications , deleteNotification };

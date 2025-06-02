@@ -4,12 +4,11 @@ import mongoose from 'mongoose';
 const UserSchema = new mongoose.Schema({
   username: {
     type: String,
-    required: true,
     unique: true,
     trim: true,
     minlength: 3,
     maxlength: 30,
-  },
+  }, 
   email: {
     type: String,
     required: true,
@@ -23,7 +22,7 @@ const UserSchema = new mongoose.Schema({
     trim: true,
   },
   password: {
-    type: String, // Required for email/password auth, optional for OAuth
+    type: String, 
   },
   googleId: { type: String, unique: true, sparse: true },
   facebookId: { type: String, unique: true, sparse: true },
@@ -39,7 +38,7 @@ const UserSchema = new mongoose.Schema({
     type: String,
   },
   profile: {
-    name: { type: String, trim: true },
+    name: { type: String },
     photo: { type: String }, // Cloudinary URL
     state: { type: String },
     country: { type: String },

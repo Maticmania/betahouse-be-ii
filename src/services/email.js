@@ -40,7 +40,7 @@ export const sendVerificationEmail = async (user, token) => {
   const source = await readFile(templatePath, 'utf-8');
   const template = handlebars.compile(source);
 
-  const verificationUrl = `${process.env.BASE_URL}/api/auth/verify-email?token=${token}`;
+  const verificationUrl = `${process.env.BASE_URL}/verify-email?token=${token}`;
   const html = template({
     name: user?.profile?.name || 'there',
     verificationUrl,
