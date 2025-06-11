@@ -31,12 +31,12 @@ try {
     // Try access token first
     return jwt.verify(token, process.env.JWT_SECRET);
   } catch (err) {
-    // If it fails, try refresh token
-    try {
-      return jwt.verify(token, process.env.JWT_REFRESH_SECRET);
-    } catch (refreshErr) {
-      throw new Error("Invalid or expired token");
-    }
+    // // If it fails, try refresh token
+    // try {
+    //   return jwt.verify(token, process.env.JWT_REFRESH_SECRET);
+    // } catch (refreshErr) {
+    //   throw new Error("Invalid or expired token");
+    // }
   }
 };
 

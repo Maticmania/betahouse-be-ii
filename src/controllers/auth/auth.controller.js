@@ -1,6 +1,7 @@
 // src/api/auth/auth.controller.js
 import User from "../../models/User.js";
 import Session from "../../models/Session.js";
+import Notification from "../../models/Notification.js";
 import {
   hashPassword,
   comparePassword,
@@ -11,10 +12,12 @@ import {
 import { sendVerificationEmail } from "../../services/email.js";
 import { v4 as uuidv4 } from "uuid";
 import passport from "../../config/passport.config.js";
+import { createNotification } from "../../services/notification.js";
 import jwt from "jsonwebtoken";
 
 const signup = async (req, res) => {
   const { email, password, name, phone } = req.body;
+
   try {
     const existingUser = await User.findOne({ email });
     if (existingUser)
@@ -30,32 +33,56 @@ const signup = async (req, res) => {
       verificationToken,
     });
     await user.save();
-    
+
+    // 1. Send verification email
     await sendVerificationEmail(user, verificationToken);
+
+    // 2. Create session
     const token = generateToken(user._id);
+    const refreshToken = generateRefreshToken(user._id);
     const session = new Session({
       user: user._id,
-      token: token,
+      token: refreshToken,
       device: req.headers["user-agent"],
       ipAddress: req.ip,
     });
     await session.save();
 
-    res
-      .status(200)
-      .json({
-        token,
-        user: {
-          id: user._id,
-          email: user.email,
-          role: user.role,
-          profile: user.profile,
-        },
-      });
+    // 3. Create welcome notification
+    await createNotification(
+      user._id,
+      'system',
+      `Welcome ${user.profile.name || 'User'}! We're excited to have you onboard.`,
+      null,
+      'Welcome to BetaHouse 🎉',
+      'System'
+    );
+
+    // 4. Create verify email reminder
+    await createNotification(
+      user._id,
+      'system',
+      `Please verify your email to unlock all features on BetaHouse.`,
+      null,
+      'Verify Your Email ✉️',
+      'System'
+    );
+
+    res.status(200).json({
+      token,
+      user: {
+        id: user._id,
+        email: user.email,
+        role: user.role,
+        profile: user.profile,
+      },
+    });
   } catch (error) {
+    console.error("Signup error:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+
 
 const verifyEmail = async (req, res) => {
   const { token } = req.query;
@@ -68,8 +95,27 @@ const verifyEmail = async (req, res) => {
     user.verificationToken = null;
     await user.save();
 
+    // Delete the "verify email" notification
+    await Notification.deleteMany({
+      user: user._id,
+      type: 'system',
+      title: 'Verify Your Email ✉️',
+      read: false,
+    });
+
+    // Create a "welcome" notification
+    await createNotification(
+      user._id,
+      'system',
+      `Your email has been verified. You now have full access to all features.`,
+      null,
+      'Email Verified ✅',
+      'System'
+    );
+
     res.status(200).json({ message: "Email verified successfully" });
   } catch (error) {
+    console.error("Email verification error:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
@@ -142,16 +188,19 @@ const googleAuth = passport.authenticate("google", {
 const googleCallback = async (req, res) => {
   try {
     const token = generateToken(req.user._id);
+    const refreshToken = generateRefreshToken(req.user._id);
+
     const session = new Session({
       user: req.user._id,
-      token,
+      token: refreshToken,
       device: req.headers["user-agent"],
       ipAddress: req.ip,
     });
     await session.save();
 
-    res.redirect(`${process.env.BASE_URL}/auth/success?token=${token}`);
+    res.redirect(`${process.env.FRONTEND_URL}/auth-success?token=${token}&refresh_token=${refreshToken}`);
   } catch (error) {
+    res.redirect(`${process.env.FRONTEND_URL}/auth-error?error=${access_denied}&error_description={error.message}`);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };

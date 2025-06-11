@@ -102,13 +102,14 @@ const createProperty = async (req, res) => {
 
     await property.save();
 
-    const admins = await User.find({ role: 'admin' });
-    for (const admin of admins) {
+   for (const admin of admins) {
       await createNotification(
         admin._id,
-        'property_submitted',
+        'property', // ✅ matches enum in schema
         `New property "${title}" submitted by ${req.user.profile.name} (@${req.user.username}) for approval.`,
-        property._id
+        property._id,
+        'New Property Submission', // ✅ title
+        'Property' // ✅ relatedModel
       );
     }
 
@@ -388,21 +389,9 @@ const toggleWishlist = async (req, res) => {
     if (index === -1) {
       user.wishlist.push(id);
       property.savedCount += 1;
-      await createNotification(
-        user._id,
-        'wishlist_update',
-        `You added "${property.title}" to your wishlist.`,
-        property._id
-      );
     } else {
       user.wishlist.splice(index, 1);
       property.savedCount = Math.max(0, property.savedCount - 1);
-      await createNotification(
-        user._id,
-        'wishlist_update',
-        `You removed "${property.title}" from your wishlist.`,
-        property._id
-      );
     }
 
     await user.save();
@@ -435,9 +424,11 @@ const updatePropertyStatus = async (req, res) => {
     const agent = await User.findById(property.createdBy);
     await createNotification(
       agent._id,
-      `property_${status}`,
+      'property', // match your schema
       `Your property "${property.title}" has been ${status}.`,
-      property._id
+      property._id,
+      `Property ${status === 'available' ? 'Approved' : 'Rejected'}`, // title
+      'Property' // relatedModel
     );
 
     res.status(200).json({ message: `Property ${status}`, property });
@@ -445,6 +436,7 @@ const updatePropertyStatus = async (req, res) => {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
+
 
 // Toggle featured property (Admin only)
 const toggleFeatured = async (req, res) => {
@@ -462,16 +454,22 @@ const toggleFeatured = async (req, res) => {
     const agent = await User.findById(property.createdBy);
     await createNotification(
       agent._id,
-      'property_featured',
+      'property', // match schema enum
       `Your property "${property.title}" has been ${property.isFeatured ? 'featured' : 'unfeatured'}.`,
-      property._id
+      property._id,
+      property.isFeatured ? 'Property Featured' : 'Property Unfeatured',
+      'Property'
     );
 
-    res.status(200).json({ message: `Property ${property.isFeatured ? 'featured' : 'unfeatured'}`, property });
+    res.status(200).json({
+      message: `Property ${property.isFeatured ? 'featured' : 'unfeatured'}`,
+      property,
+    });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
+
 
 export {
   createProperty,

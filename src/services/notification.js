@@ -22,29 +22,38 @@ const scanKeys = async (pattern) => {
 /**
  * Creates a notification and caches it
  */
-export const createNotification = async (userId, type, content, relatedId = null) => {
+export const createNotification = async (
+  userId,
+  type,
+  content,
+  relatedId = null,
+  title = '',
+  relatedModel = null
+) => {
   try {
     const notification = await new Notification({
       user: userId,
       type,
+      title,
       content,
       relatedId,
+      relatedModel,
     }).save();
 
-    // Cache notification
+    // Cache notification in Redis
     await redisClient.set(
       `notifications:${userId}:${notification._id}`,
       JSON.stringify(notification),
       'EX',
-      24 * 60 * 60
+      24 * 60 * 60 // 24 hours
     );
 
-    // Email user
+    // Send email if user has one
     const user = await User.findById(userId).lean();
     if (user?.email) {
       await sendNotificationEmail(
         user.email,
-        type.replace(/_/g, ' ').toUpperCase(),
+        title || type.replace(/_/g, ' ').toUpperCase(),
         content
       );
     }
