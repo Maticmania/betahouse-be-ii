@@ -70,6 +70,7 @@ const signup = async (req, res) => {
 
     res.status(200).json({
       token,
+      refreshToken,
       user: {
         id: user._id,
         email: user.email,
@@ -147,9 +148,6 @@ const login = async (req, res) => {
     const isMatch = await comparePassword(password, user.password);
     if (!isMatch)
       return res.status(400).json({ message: "Invalid credentials" });
-
-    // if (!user.isEmailVerified)
-    //   return res.status(403).json({ message: "Please verify your email" });
 
     const token = generateToken(user._id);
     const refreshToken = generateRefreshToken(user._id);

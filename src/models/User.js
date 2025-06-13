@@ -1,5 +1,5 @@
 // src/models/User.js
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 
 const UserSchema = new mongoose.Schema({
   username: {
@@ -8,7 +8,7 @@ const UserSchema = new mongoose.Schema({
     trim: true,
     minlength: 3,
     maxlength: 30,
-  }, 
+  },
   email: {
     type: String,
     required: true,
@@ -16,17 +16,21 @@ const UserSchema = new mongoose.Schema({
     lowercase: true,
     trim: true,
   },
-  phone:{
+  phone: {
     type: String,
     unique: true,
     trim: true,
   },
   password: {
-    type: String, 
+    type: String,
   },
   googleId: { type: String, unique: true, sparse: true },
   facebookId: { type: String, unique: true, sparse: true },
   isEmailVerified: {
+    type: Boolean,
+    default: false,
+  },
+  twoFactorEnabled: {
     type: Boolean,
     default: false,
   },
@@ -41,7 +45,7 @@ const UserSchema = new mongoose.Schema({
     name: { type: String },
     photo: { type: String }, // Cloudinary URL
     state: { type: String },
-    country: { type: String },
+    gender: { type: String, enum: ["Male, Female, Other"], default: "Other" }, //
     about: {
       bio: { type: String }, // Detailed bio for agents
       specialties: [{ type: String }], // e.g., ["Residential", "Commercial"]
@@ -60,21 +64,31 @@ const UserSchema = new mongoose.Schema({
   },
   preferences: {
     priceRange: { min: Number, max: Number },
-    propertyType: { type: [String], enum: ['apartment', 'house', 'condo', 'land', 'single-family', 'bungalow'] },
+    propertyType: {
+      type: [String],
+      enum: [
+        "apartment",
+        "house",
+        "condo",
+        "land",
+        "single-family",
+        "bungalow",
+      ],
+    },
     features: { type: [String] },
   },
-  wishlist: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Property' }],
+  wishlist: [{ type: mongoose.Schema.Types.ObjectId, ref: "Property" }],
   role: {
     type: String,
-    enum: ['user', 'agent', 'admin'],
-    default: 'user',
+    enum: ["user", "agent", "admin"],
+    default: "user",
   },
   ratings: {
     average: { type: Number, default: 0 },
     count: { type: Number, default: 0 },
     reviews: [
       {
-        user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
         rating: { type: Number, min: 1, max: 5 },
         comment: { type: String },
         createdAt: { type: Date, default: Date.now },
@@ -87,4 +101,4 @@ const UserSchema = new mongoose.Schema({
   },
 });
 
-export default mongoose.model('User', UserSchema);
+export default mongoose.model("User", UserSchema);

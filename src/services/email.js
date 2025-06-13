@@ -68,3 +68,21 @@ export const sendNotificationEmail = async (to, subject, content) => {
     html,
   });
 };
+
+// Send OTP email
+export const sendTwoFactorCodeEmail = async (to, otp) => {
+  const templatePath = path.join(__dirname, '../templates/two-factor-code.hbs');
+  const source = await readFile(templatePath, 'utf-8');
+  const template = handlebars.compile(source);
+  const html = template({
+    otp,
+    year: new Date().getFullYear()
+  });
+
+  return transporter.sendMail({
+    from: `"${process.env.EMAIL_FROM_NAME || 'BetaHouse'}" <${process.env.EMAIL_USER}>`,
+    to,
+    subject: 'Your Two-Factor Authentication (2FA) Code',
+    html,
+  });
+};

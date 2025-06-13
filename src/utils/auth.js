@@ -2,6 +2,8 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import redisClient from '../config/redis.config.js';
+import crypto from "crypto";
+
 
 const hashPassword = async (password) => {
   const salt = await bcrypt.genSalt(10);
@@ -40,4 +42,17 @@ try {
   }
 };
 
-export { hashPassword, comparePassword, generateToken, blacklistToken, verifyToken };
+const generateCode = (length = 6) => {
+  let code = '';
+  const bytes = crypto.randomBytes(length); // generates secure random bytes
+
+  for (let i = 0; i < length; i++) {
+    // Convert each byte to a digit (0–9)
+    code += bytes[i] % 10;
+  }
+
+  return code;
+};
+
+
+export { hashPassword, comparePassword, generateToken, blacklistToken, verifyToken, generateCode };
