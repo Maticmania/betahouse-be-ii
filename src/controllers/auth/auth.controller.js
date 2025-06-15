@@ -9,11 +9,33 @@ import {
   generateRefreshToken,
   blacklistToken,
 } from "../../utils/auth.js";
+import redisClient from "../../config/redis.config.js";
+
 import { sendVerificationEmail } from "../../services/email.js";
 import { v4 as uuidv4 } from "uuid";
 import passport from "../../config/passport.config.js";
 import { createNotification } from "../../services/notification.js";
 import jwt from "jsonwebtoken";
+import {UAParser} from "ua-parser-js";
+import { getLocationFromIp } from "../../utils/location.js";
+
+const createSession = async (user, refreshToken, req) => {
+  const parser = new UAParser(req.headers["user-agent"]);
+  const device = parser.getResult();
+  const ip = req.ip;
+  const location = await getLocationFromIp(ip);
+
+  const session = new Session({
+    user: user._id,
+    refreshToken,
+    ipAddress: ip,
+    device,
+    location,
+  });
+
+  await session.save();
+  return session;
+};
 
 const signup = async (req, res) => {
   const { email, password, name, phone } = req.body;
@@ -29,7 +51,8 @@ const signup = async (req, res) => {
     const user = new User({
       email,
       password: hashedPassword,
-      profile: { name, phone },
+      phone,
+      profile: { name },
       verificationToken,
     });
     await user.save();
@@ -40,13 +63,8 @@ const signup = async (req, res) => {
     // 2. Create session
     const token = generateToken(user._id);
     const refreshToken = generateRefreshToken(user._id);
-    const session = new Session({
-      user: user._id,
-      token: refreshToken,
-      device: req.headers["user-agent"],
-      ipAddress: req.ip,
-    });
-    await session.save();
+    const session = await createSession(user, refreshToken, req);
+
 
     // 3. Create welcome notification
     await createNotification(
@@ -149,16 +167,9 @@ const login = async (req, res) => {
     if (!isMatch)
       return res.status(400).json({ message: "Invalid credentials" });
 
-    const token = generateToken(user._id);
     const refreshToken = generateRefreshToken(user._id);
-
-    const session = new Session({
-      user: user._id,
-      token: refreshToken,
-      device: req.headers["user-agent"],
-      ipAddress: req.ip,
-    });
-    await session.save();
+    const session = await createSession(user, refreshToken, req);
+    const token = generateToken(user._id, session._id);;
 
     res
       .status(200)
@@ -187,14 +198,10 @@ const googleCallback = async (req, res) => {
   try {
     const token = generateToken(req.user._id);
     const refreshToken = generateRefreshToken(req.user._id);
+    // Check if user exists, if not create a new one
+    let user = await User.findOne({ _id: req.user._id });
+    const session = await createSession(user, refreshToken, req);
 
-    const session = new Session({
-      user: req.user._id,
-      token: refreshToken,
-      device: req.headers["user-agent"],
-      ipAddress: req.ip,
-    });
-    await session.save();
 
     res.redirect(`${process.env.FRONTEND_URL}/auth-success?token=${token}&refresh_token=${refreshToken}`);
   } catch (error) {
@@ -208,13 +215,10 @@ const facebookAuth = passport.authenticate("facebook", { scope: ["email"] });
 const facebookCallback = async (req, res) => {
   try {
     const token = generateToken(req.user._id);
-    const session = new Session({
-      user: req.user._id,
-      token,
-      device: req.headers["user-agent"],
-      ipAddress: req.ip,
-    });
-    await session.save();
+    const refreshToken = generateRefreshToken(req.user._id);
+    // Check if user exists, if not create a new one
+    let user = await User.findOne({ _id: req.user._id });
+    const session = await createSession(user, refreshToken, req);
 
     res.redirect(`${process.env.BASE_URL}/auth/success?token=${token}`);
   } catch (error) {
@@ -236,7 +240,7 @@ const logout = async (req, res) => {
 const getSessions = async (req, res) => {
   try {
     const sessions = await Session.find({ user: req.user._id });
-    res.status(200).json(sessions);
+    res.status(200).json({sessions:sessions});
   } catch (error) {
     res.status(500).json({ message: "Server error", error: error.message });
   }
@@ -251,26 +255,62 @@ const revokeSession = async (req, res) => {
     });
     if (!session) return res.status(404).json({ message: "Session not found" });
 
-    await blacklistToken(session.token);
+    await blacklistToken(session.refreshToken);
     await session.deleteOne();
     res.status(200).json({ message: "Session revoked" });
   } catch (error) {
+    console.error("Revoke session error:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+
+// Add a new endpoint to logout all other sessions
+const logoutAllOtherSessions = async (req, res) => {
+  try {
+    const currentSessionId = req.sessionId;
+    if (!currentSessionId) return res.status(401).json({ message: "Session not found" });
+
+    // Find all other sessions for this user
+    const otherSessions = await Session.find({
+      user: req.user._id,
+      _id: { $ne: currentSessionId },
+    });
+
+    for (const session of otherSessions) {
+      await blacklistToken(session.refreshToken);
+    }
+
+    await Session.deleteMany({
+      user: req.user._id,
+      _id: { $ne: currentSessionId },
+    });
+
+    res.status(200).json({ message: "All other sessions revoked" });
+  } catch (err) {
+    console.error("Logout other sessions error:", err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+
 
 const refreshAccessToken = async (req, res) => {
   const { refreshToken } = req.body;
 
   if (!refreshToken) return res.status(401).json({ message: "No refresh token provided" });
-
-  try {
-    const session = await Session.findOne({ token: refreshToken });
+      // ✅ Check Redis blacklist
+    const isBlacklisted = await redisClient.get(`blacklist:${refreshToken}`);
+    if (isBlacklisted) {
+      console.log("Refresh token is blacklisted");
+      return res.status(403).json({ message: "Refresh token has been revoked" });
+    }
+    try {
+    const session = await Session.findOne({ refreshToken });
     if (!session) return res.status(403).json({ message: "Invalid session" });
 
     const payload = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
 
-    const newAccessToken = generateToken(payload.userId);
+    const newAccessToken = generateToken(payload.userId, session._id);
     res.status(200).json({ token: newAccessToken });
 
   } catch (err) {
@@ -326,6 +366,7 @@ export {
   logout,
   getSessions,
   revokeSession,
+  logoutAllOtherSessions,
   refreshAccessToken,
   getMe
 };

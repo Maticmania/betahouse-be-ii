@@ -35,20 +35,18 @@ const listUsers = async (req, res) => {
 // Update profile (self)
 const updateProfile = async (req, res) => {
   try {
-    const { id } = req.params;
-    const { username, email, profile } = req.body;
+    const id = req.user._id;
+    const { name, phone, bio, state, gender } = req.body;
 
     const user = await User.findById(id);
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
+    if (!user) return res.status(404).json({ message: "User not found" });
 
-    // Update fields
-    user.username = username || user.username;
-    user.email = email || user.email;
-    user.profile = profile ? { ...user.profile, ...profile } : user.profile;
+    user.profile.name = name || user.profile.name;
+    user.phone = phone || user.phone;
+    user.profile.about.bio = bio || user.profile.about.bio;
+    user.profile.state = state || user.profile.state;
+    user.profile.gender = gender || user.profile.gender;
 
-    // Handle profile photo upload
     if (req.file) {
       const result = await cloudinary.uploader.upload(req.file.path, {
         folder: "real-estate/betahouse/users",
@@ -57,28 +55,19 @@ const updateProfile = async (req, res) => {
     }
 
     await user.save();
-
-    // Notify user of updates
-    await createNotification(
-      user._id,
-      "profile_updated",
-      `Your profile (@${user.username}) has been updated.`,
-      user._id
-    );
-
-    // Clear cache
     await redisClient.del(`user:${user._id}`);
 
-    res
-      .status(200)
-      .json({
-        message: "User updated",
-        user: user.toObject({ getters: true }),
-      });
+    res.status(200).json({
+      message: "Profile updated",
+      user: user.toObject({ getters: true }),
+    });
   } catch (error) {
+    console.error("Error updating profile:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+
+
 
 // Update user profile (Admin only)
 const updateUserProfile = async (req, res) => {
@@ -123,12 +112,10 @@ const updateUserProfile = async (req, res) => {
     );
     // Clear cache
     await redisClient.del(`user:${user._id}`);
-    res
-      .status(200)
-      .json({
-        message: "User profile updated",
-        user: user.toObject({ getters: true }),
-      });
+    res.status(200).json({
+      message: "User profile updated",
+      user: user.toObject({ getters: true }),
+    });
   } catch (error) {
     res.status(500).json({ message: "Server error", error: error.message });
   }
@@ -297,5 +284,5 @@ export {
   addAgentReview,
   getAgentProfile,
   getAllAgents,
-  deleteUserSelf
+  deleteUserSelf,
 };

@@ -25,8 +25,8 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-router.get('/', authenticate, restrictTo('admin'), listUsers);
 router.put('/profile', authenticate, upload.single('photo'), updateProfile);
+router.get('/', authenticate, restrictTo('admin'), listUsers);
 router.put('/:id/profile', authenticate, restrictTo('admin'), upload.single('photo'), updateUserProfile);
 router.delete('/self', authenticate, deleteUserSelf);
 router.delete('/:id', authenticate, restrictTo('admin'), deleteUser);

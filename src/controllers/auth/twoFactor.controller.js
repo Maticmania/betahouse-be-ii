@@ -32,10 +32,13 @@ export const send2FACode = async (req, res) => {
 };
 
 export const verify2FACode = async (req, res) => {
-  const { userId, code } = req.body;
+  const userId = req.user._id;
+
+  const { code } = req.body;
   try {
     const token = await TwoFactorToken.findOne({ user: userId, code });
-    if (!token) return res.status(400).json({ message: "Invalid or expired code" });
+    if (!token)
+      return res.status(400).json({ message: "Invalid or expired code" });
 
     if (token.expiresAt < new Date()) {
       return res.status(400).json({ message: "Code has expired" });
@@ -53,7 +56,7 @@ export const verify2FACode = async (req, res) => {
 
 // two factor setup
 export const setupTwoFactor = async (req, res) => {
-  const { userId } = req.body;
+  const userId = req.user._id;
   try {
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
@@ -61,7 +64,9 @@ export const setupTwoFactor = async (req, res) => {
     user.twoFactorEnabled = true;
     await user.save();
 
-    res.json({ message: `Two-factor authentication ${enable ? 'enabled' : 'disabled'} successfully` });
+    res.json({
+      message: `Two-factor authentication enabled successfully`,
+    });
   } catch (error) {
     console.error("Error setting up 2FA:", error);
     return res.status(500).json({ message: "Internal server error" });
@@ -69,7 +74,7 @@ export const setupTwoFactor = async (req, res) => {
 };
 // disbale two factor
 export const disableTwoFactor = async (req, res) => {
-  const { userId } = req.body;
+  const userId = req.user._id;
   try {
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
@@ -89,9 +94,9 @@ export const disableTwoFactor = async (req, res) => {
 
 //two factor status
 export const getTwoFactorStatus = async (req, res) => {
-  const { userId } = req.body;
+  const userId = req.user._id;
   try {
-    const user = await User.findById(userId).select('twoFactorEnabled');
+    const user = await User.findById(userId).select("twoFactorEnabled");
     if (!user) return res.status(404).json({ message: "User not found" });
 
     res.json({ twoFactorEnabled: user.twoFactorEnabled });

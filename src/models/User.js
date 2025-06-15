@@ -45,7 +45,11 @@ const UserSchema = new mongoose.Schema({
     name: { type: String },
     photo: { type: String }, // Cloudinary URL
     state: { type: String },
-    gender: { type: String, enum: ["Male, Female, Other"], default: "Other" }, //
+    gender: {
+      type: String,
+      enum: ["Male", "Female", "Other"],
+      default: "Other",
+    },
     about: {
       bio: { type: String }, // Detailed bio for agents
       specialties: [{ type: String }], // e.g., ["Residential", "Commercial"]

@@ -96,7 +96,7 @@ app.use('/api/v2/auth', authRoutes);
 app.use('/api/v2/properties', propertyRoutes);
 app.use('/api/v2/notifications', notificationRoutes);
 app.use('/api/v2/agent', agentRoutes);
-app.use('/api/v2/user', userRoutes);
+app.use('/api/v2/users', userRoutes);
 
 // Start server
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

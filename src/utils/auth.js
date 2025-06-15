@@ -14,8 +14,8 @@ const comparePassword = async (password, hashedPassword) => {
   return bcrypt.compare(password, hashedPassword);
 };
 
-const generateToken = (userId) => {
-  return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '1m' });
+const generateToken = (userId, sessionId) => {
+  return jwt.sign({ userId, sessionId }, process.env.JWT_SECRET, { expiresIn: '1m' });
 };
 export const generateRefreshToken = (userId) => {
   return jwt.sign({ userId }, process.env.JWT_REFRESH_SECRET, { expiresIn: "7d" });
@@ -53,6 +53,8 @@ const generateCode = (length = 6) => {
 
   return code;
 };
+
+
 
 
 export { hashPassword, comparePassword, generateToken, blacklistToken, verifyToken, generateCode };
