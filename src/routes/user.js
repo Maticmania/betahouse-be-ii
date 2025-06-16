@@ -8,7 +8,9 @@ import {
   getAllAgents,
   updateProfile,
   updateUserProfile,
-  deleteUserSelf
+  deleteUserSelf,
+  updateEmail,
+  updatePassword
 } from '../controllers/user/user.controller.js';
 import { authenticate, restrictTo } from '../middlewares/auth.middleware.js';
 import multer from 'multer';
@@ -27,6 +29,8 @@ const upload = multer({ storage });
 
 router.put('/profile', authenticate, upload.single('photo'), updateProfile);
 router.get('/', authenticate, restrictTo('admin'), listUsers);
+router.put('/email', authenticate, updateEmail);
+router.put('/password', authenticate, updatePassword);
 router.put('/:id/profile', authenticate, restrictTo('admin'), upload.single('photo'), updateUserProfile);
 router.delete('/self', authenticate, deleteUserSelf);
 router.delete('/:id', authenticate, restrictTo('admin'), deleteUser);

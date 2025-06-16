@@ -37,6 +37,12 @@ export const verify2FACode = async (req, res) => {
   const { code } = req.body;
   try {
     const token = await TwoFactorToken.findOne({ user: userId, code });
+    if (!code)
+      return res.status(400).json({ message: "Code is required" });
+
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
     if (!token)
       return res.status(400).json({ message: "Invalid or expired code" });
 
@@ -44,8 +50,12 @@ export const verify2FACode = async (req, res) => {
       return res.status(400).json({ message: "Code has expired" });
     }
 
+    user.twoFactorEnabled = true;
     token.verified = true;
+    
     await token.save();
+    await user.save();
+
 
     res.json({ message: "2FA code verified successfully" });
   } catch (error) {
@@ -61,12 +71,20 @@ export const setupTwoFactor = async (req, res) => {
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    user.twoFactorEnabled = true;
-    await user.save();
+    const code = generateCode();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 mins
 
-    res.json({
-      message: `Two-factor authentication enabled successfully`,
+    await TwoFactorToken.deleteMany({ user: userId }); // clear old
+
+    await TwoFactorToken.create({
+      user: userId,
+      code,
+      expiresAt,
     });
+
+    await sendTwoFactorCodeEmail(user.email, code);
+
+    res.json({ success:true, message: `2FA code sent to your email` });
   } catch (error) {
     console.error("Error setting up 2FA:", error);
     return res.status(500).json({ message: "Internal server error" });

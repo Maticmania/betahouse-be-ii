@@ -5,7 +5,9 @@ import cloudinary from "../../config/cloudinary.config.js";
 import redisClient from "../../config/redis.config.js";
 import AgentKYC from "../../models/AgentKYC.js";
 import { comparePassword } from "../../utils/auth.js";
-
+import { sendVerificationEmail } from "../../services/email.js";
+import { hashPassword } from "../../utils/auth.js";
+import { v4 as uuidv4 } from "uuid";
 // List users (Admin only)
 const listUsers = async (req, res) => {
   try {
@@ -42,10 +44,16 @@ const updateProfile = async (req, res) => {
     if (!user) return res.status(404).json({ message: "User not found" });
 
     user.profile.name = name || user.profile.name;
-    user.phone = phone || user.phone;
+    // user.phone = phone || user.phone;
     user.profile.about.bio = bio || user.profile.about.bio;
     user.profile.state = state || user.profile.state;
     user.profile.gender = gender || user.profile.gender;
+
+    if( phone) {
+      user.phone = phone || user.phone;
+      user.isPhoneVerified = false; // Reset phone verification status
+    }
+
 
     if (req.file) {
       const result = await cloudinary.uploader.upload(req.file.path, {
@@ -67,7 +75,73 @@ const updateProfile = async (req, res) => {
   }
 };
 
+//update email
+const updateEmail = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { email } = req.body;
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    // Check if email is already taken
+    const existingUser = await User.findOne({ email });
+    if (existingUser && existingUser._id.toString() !== userId.toString()) {
+      return res.status(400).json({ message: "Email is already taken" });
+    }
+    user.email = email;
+    user.isEmailVerified = false;
+    const verificationToken = uuidv4();
 
+    await sendVerificationEmail(user, verificationToken);
+    // Save user
+    await user.save();
+    // Clear cache
+    await redisClient.del(`user:${user._id}`);
+
+    res.status(200).json({ message: "Email updated successfully" });
+  } catch (error) {
+    console.error("Error updating email:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+//Update password
+const updatePassword = async (req, res) => {
+  try {
+    const userId = req.user._id; // ✅ fix destructure
+    const { currentPassword, newPassword } = req.body;
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    // ✅ Verify current password
+    const isMatch = await comparePassword(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Incorrect current password" });
+    }
+    // ✅ Update password
+    const hashedPassword = await hashPassword(newPassword);
+    user.password = hashedPassword; // Assuming you have a hashPassword function to hash the new password
+
+    await user.save();
+    // ✅ Clear cache
+
+    await createNotification(
+      user._id,
+      "system",
+      `Hello ${user.profile.name}, your password has been successfully updated. If you did not request this change, please contact support immediately.`,
+      null,
+      "Password Update",
+      "System"
+    );
+    await redisClient.del(`user:${user._id}`);
+    res.status(200).json({ message: "Password updated successfully" });
+  } catch (error) {
+    console.error("Error updating password:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
 
 // Update user profile (Admin only)
 const updateUserProfile = async (req, res) => {
@@ -285,4 +359,6 @@ export {
   getAgentProfile,
   getAllAgents,
   deleteUserSelf,
+  updateEmail,
+  updatePassword
 };
