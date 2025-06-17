@@ -18,10 +18,22 @@ import userRoutes from './src/routes/user.js';
 
 
 const app = express();
+const allowedOrigins = ["http://localhost:3000", "https://yourfrontend.com"]
 
 // Middleware
 app.use(express.json());
-app.use(cors());
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true)
+      } else {
+        callback(new Error("Not allowed by CORS"))
+      }
+    },
+    credentials: true, // ✅ allow cookies/token
+  })
+)
 app.use(morgan('dev'));
 app.use(helmet());
 app.use(

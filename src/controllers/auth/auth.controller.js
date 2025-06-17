@@ -202,20 +202,13 @@ const login = async (req, res) => {
     const refreshToken = generateRefreshToken(user._id);
     const session = await createSession(user, refreshToken, req);
     const token = generateToken(user._id, session._id);
+    const userObj = user.toObject(); // or use .lean() if it’s from a query
 
+    delete userObj.password;
     res.status(200).json({
       token,
       refreshToken,
-      user: {
-        id: user._id,
-        email: user.email,
-        isEmailVerified: user.isEmailVerified,
-        isPhoneVerified: user.isPhoneVerified,
-        phone: user.phone,
-        username: user.username,
-        role: user.role,
-        profile: user.profile,
-      },
+      user: userObj,
     });
   } catch (error) {
     console.error("Login error:", error);
@@ -262,7 +255,7 @@ const verifyTwoFactorCode = async (req, res) => {
 };
 
 const resendTwoFactorCode = async (req, res) => {
-  const {userId} = req.body;
+  const { userId } = req.body;
   try {
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: "User not found" });

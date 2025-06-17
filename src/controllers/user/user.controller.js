@@ -1,13 +1,14 @@
 // src/api/user/user.controller.js
 import User from "../../models/User.js";
 import { createNotification } from "../../services/notification.js";
-import cloudinary from "../../config/cloudinary.config.js";
 import redisClient from "../../config/redis.config.js";
 import AgentKYC from "../../models/AgentKYC.js";
+import { cloudinary } from "../../config/cloudinary.config.js";
 import { comparePassword } from "../../utils/auth.js";
 import { sendVerificationEmail } from "../../services/email.js";
 import { hashPassword } from "../../utils/auth.js";
 import { v4 as uuidv4 } from "uuid";
+import fs from 'fs'
 // List users (Admin only)
 const listUsers = async (req, res) => {
   try {
@@ -38,7 +39,7 @@ const listUsers = async (req, res) => {
 const updateProfile = async (req, res) => {
   try {
     const id = req.user._id;
-    const { name, phone, bio, state, gender } = req.body;
+    const { name, phone, bio, state, gender, removeImage} = req.body;
 
     const user = await User.findById(id);
     if (!user) return res.status(404).json({ message: "User not found" });
@@ -54,17 +55,21 @@ const updateProfile = async (req, res) => {
       user.isPhoneVerified = false; // Reset phone verification status
     }
 
-
     if (req.file) {
-      const result = await cloudinary.uploader.upload(req.file.path, {
-        folder: "real-estate/betahouse/users",
-      });
-      user.profile.photo = result.secure_url;
-    }
+          const result = await cloudinary.uploader.upload(req.file.path, {
+            folder: 'Betahouse/profile',
+          });
+          user.profile.photo = result.secure_url;
+
+          // Optional: clean up uploaded file
+          fs.unlinkSync(req.file.path);
+        } else if (removeImage === "true" || removeImage === true) {
+          item.image = null;
+        }
+
 
     await user.save();
     await redisClient.del(`user:${user._id}`);
-
     res.status(200).json({
       message: "Profile updated",
       user: user.toObject({ getters: true }),

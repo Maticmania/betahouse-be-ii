@@ -13,19 +13,10 @@ import {
   updatePassword
 } from '../controllers/user/user.controller.js';
 import { authenticate, restrictTo } from '../middlewares/auth.middleware.js';
-import multer from 'multer';
+import {upload} from '../middlewares/upload.middleware.js'; 
 
 const router = express.Router();
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/');
-  },
-  filename: (req, file, cb) => {
-    cb(null, `${Date.now()}-${file.originalname}`);
-  },
-});
-const upload = multer({ storage });
 
 router.put('/profile', authenticate, upload.single('photo'), updateProfile);
 router.get('/', authenticate, restrictTo('admin'), listUsers);

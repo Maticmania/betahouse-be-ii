@@ -1,6 +1,6 @@
 import AgentKYC from '../../models/AgentKYC.js';
 import User from '../../models/User.js';
-import cloudinary from '../../config/cloudinary.config.js';
+import {cloudinary} from '../../config/cloudinary.config.js';
 import { createNotification } from '../../services/notification.js';
 import { v4 as uuidv4 } from 'uuid';
 

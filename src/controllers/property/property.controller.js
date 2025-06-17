@@ -1,7 +1,7 @@
 // src/api/property/property.controller.js
 import Property from '../../models/Property.js';
 import User from '../../models/User.js';
-import cloudinary from '../../config/cloudinary.config.js';
+import {cloudinary} from '../../config/cloudinary.config.js';
 import { createNotification } from '../../services/notification.js';
 import redisClient from '../../config/redis.config.js';
 // Helper function for AI-driven scoring
