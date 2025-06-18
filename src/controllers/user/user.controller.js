@@ -8,7 +8,7 @@ import { comparePassword } from "../../utils/auth.js";
 import { sendVerificationEmail } from "../../services/email.js";
 import { hashPassword } from "../../utils/auth.js";
 import { v4 as uuidv4 } from "uuid";
-import fs from 'fs'
+import fs from "fs";
 // List users (Admin only)
 const listUsers = async (req, res) => {
   try {
@@ -39,7 +39,7 @@ const listUsers = async (req, res) => {
 const updateProfile = async (req, res) => {
   try {
     const id = req.user._id;
-    const { name, phone, bio, state, gender, removeImage} = req.body;
+    const { name, phone, bio, state, gender, removeImage } = req.body;
 
     const user = await User.findById(id);
     if (!user) return res.status(404).json({ message: "User not found" });
@@ -50,23 +50,22 @@ const updateProfile = async (req, res) => {
     user.profile.state = state || user.profile.state;
     user.profile.gender = gender || user.profile.gender;
 
-    if( phone) {
+    if (phone) {
       user.phone = phone || user.phone;
       user.isPhoneVerified = false; // Reset phone verification status
     }
 
     if (req.file) {
-          const result = await cloudinary.uploader.upload(req.file.path, {
-            folder: 'Betahouse/profile',
-          });
-          user.profile.photo = result.secure_url;
+      const result = await cloudinary.uploader.upload(req.file.path, {
+        folder: "Betahouse/profile",
+      });
+      user.profile.photo = result.secure_url;
 
-          // Optional: clean up uploaded file
-          fs.unlinkSync(req.file.path);
-        } else if (removeImage === "true" || removeImage === true) {
-          item.image = null;
-        }
-
+      // Optional: clean up uploaded file
+      fs.unlinkSync(req.file.path);
+    } else if (removeImage === "true" || removeImage === true) {
+      item.image = null;
+    }
 
     await user.save();
     await redisClient.del(`user:${user._id}`);
@@ -365,5 +364,5 @@ export {
   getAllAgents,
   deleteUserSelf,
   updateEmail,
-  updatePassword
+  updatePassword,
 };

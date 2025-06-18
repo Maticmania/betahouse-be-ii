@@ -1,20 +1,26 @@
-import Notification from '../models/Notification.js';
-import redisClient from '../config/redis.config.js';
-import { sendNotificationEmail } from './email.js';
-import User from '../models/User.js';
+import Notification from "../models/Notification.js";
+import redisClient from "../config/redis.config.js";
+import { sendNotificationEmail } from "./email.js";
+import User from "../models/User.js";
 
 /**
  * Scans Redis keys with a match pattern
  */
 const scanKeys = async (pattern) => {
-  let cursor = '0';
+  let cursor = "0";
   const keys = [];
 
   do {
-    const [nextCursor, batchKeys] = await redisClient.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+    const [nextCursor, batchKeys] = await redisClient.scan(
+      cursor,
+      "MATCH",
+      pattern,
+      "COUNT",
+      100
+    );
     cursor = nextCursor;
     keys.push(...batchKeys);
-  } while (cursor !== '0');
+  } while (cursor !== "0");
 
   return keys;
 };
@@ -27,7 +33,7 @@ export const createNotification = async (
   type,
   content,
   relatedId = null,
-  title = '',
+  title = "",
   relatedModel = null
 ) => {
   try {
@@ -44,7 +50,7 @@ export const createNotification = async (
     await redisClient.set(
       `notifications:${userId}:${notification._id}`,
       JSON.stringify(notification),
-      'EX',
+      "EX",
       24 * 60 * 60 // 24 hours
     );
 
@@ -53,15 +59,15 @@ export const createNotification = async (
     if (user?.email) {
       await sendNotificationEmail(
         user.email,
-        title || type.replace(/_/g, ' ').toUpperCase(),
+        title || type.replace(/_/g, " ").toUpperCase(),
         content
       );
     }
 
     return notification;
   } catch (error) {
-    console.error('Notification creation error:', error);
-    throw new Error('Failed to create notification');
+    console.error("Notification creation error:", error);
+    throw new Error("Failed to create notification");
   }
 };
 
@@ -100,7 +106,7 @@ export const getNotifications = async (userId, page = 1, limit = 10) => {
           redisClient.set(
             `notifications:${userId}:${n._id}`,
             JSON.stringify(n),
-            'EX',
+            "EX",
             24 * 60 * 60
           )
         )
@@ -126,8 +132,11 @@ export const getNotifications = async (userId, page = 1, limit = 10) => {
  */
 export const markNotificationRead = async (userId, notificationId) => {
   try {
-    const notification = await Notification.findOne({ _id: notificationId, user: userId });
-    if (!notification) throw new Error('Notification not found');
+    const notification = await Notification.findOne({
+      _id: notificationId,
+      user: userId,
+    });
+    if (!notification) throw new Error("Notification not found");
 
     notification.read = true;
     await notification.save();
@@ -135,7 +144,7 @@ export const markNotificationRead = async (userId, notificationId) => {
     await redisClient.set(
       `notifications:${userId}:${notification._id}`,
       JSON.stringify(notification),
-      'EX',
+      "EX",
       24 * 60 * 60
     );
 
@@ -164,7 +173,12 @@ export const markAllNotificationsRead = async (userId) => {
           const data = JSON.parse(raw);
           if (!data.read) {
             data.read = true;
-            await redisClient.set(key, JSON.stringify(data), 'EX', 24 * 60 * 60);
+            await redisClient.set(
+              key,
+              JSON.stringify(data),
+              "EX",
+              24 * 60 * 60
+            );
           }
         }
       })
@@ -176,20 +190,22 @@ export const markAllNotificationsRead = async (userId) => {
   }
 };
 
-
 /**
  * Deletes a notification
  */
 export const deleteNotificationservice = async (userId, notificationId) => {
   try {
-    const notification = await Notification.findOneAndDelete({ _id: notificationId, user: userId });
-    if (!notification) throw new Error('Notification not found');
+    const notification = await Notification.findOneAndDelete({
+      _id: notificationId,
+      user: userId,
+    });
+    if (!notification) throw new Error("Notification not found");
 
     // Remove from Redis cache
     await redisClient.del(`notifications:${userId}:${notification._id}`);
 
-    return { message: 'Notification deleted successfully' };
+    return { message: "Notification deleted successfully" };
   } catch (err) {
     throw new Error(`Failed to delete notification: ${err.message}`);
   }
-}
+};

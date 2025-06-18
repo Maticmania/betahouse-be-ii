@@ -1,9 +1,8 @@
 // src/utils/auth.js
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import redisClient from '../config/redis.config.js';
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import redisClient from "../config/redis.config.js";
 import crypto from "crypto";
-
 
 const hashPassword = async (password) => {
   const salt = await bcrypt.genSalt(10);
@@ -15,21 +14,25 @@ const comparePassword = async (password, hashedPassword) => {
 };
 
 const generateToken = (userId, sessionId) => {
-  return jwt.sign({ userId, sessionId }, process.env.JWT_SECRET, { expiresIn: '1m' });
+  return jwt.sign({ userId, sessionId }, process.env.JWT_SECRET, {
+    expiresIn: "1m",
+  });
 };
 export const generateRefreshToken = (userId) => {
-  return jwt.sign({ userId }, process.env.JWT_REFRESH_SECRET, { expiresIn: "7d" });
+  return jwt.sign({ userId }, process.env.JWT_REFRESH_SECRET, {
+    expiresIn: "7d",
+  });
 };
 const blacklistToken = async (token) => {
   const decoded = jwt.decode(token);
   const expiresIn = decoded.exp - Math.floor(Date.now() / 1000);
-  await redisClient.set(`blacklist:${token}`, 'blacklisted', 'EX', expiresIn);
+  await redisClient.set(`blacklist:${token}`, "blacklisted", "EX", expiresIn);
 };
 
 const verifyToken = async (token) => {
   const isBlacklisted = await redisClient.get(`blacklist:${token}`);
-  if (isBlacklisted) throw new Error('Token is blacklisted');
-try {
+  if (isBlacklisted) throw new Error("Token is blacklisted");
+  try {
     // Try access token first
     return jwt.verify(token, process.env.JWT_SECRET);
   } catch (err) {
@@ -43,7 +46,7 @@ try {
 };
 
 const generateCode = (length = 6) => {
-  let code = '';
+  let code = "";
   const bytes = crypto.randomBytes(length); // generates secure random bytes
 
   for (let i = 0; i < length; i++) {
@@ -54,7 +57,11 @@ const generateCode = (length = 6) => {
   return code;
 };
 
-
-
-
-export { hashPassword, comparePassword, generateToken, blacklistToken, verifyToken, generateCode };
+export {
+  hashPassword,
+  comparePassword,
+  generateToken,
+  blacklistToken,
+  verifyToken,
+  generateCode,
+};

@@ -1,10 +1,10 @@
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 
 const NotificationSchema = new mongoose.Schema(
   {
     user: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: "User",
       required: true,
       index: true,
     },
@@ -13,7 +13,7 @@ const NotificationSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['message', 'property', 'system'],
+      enum: ["message", "property", "system"],
       required: true,
     },
     content: {
@@ -22,12 +22,12 @@ const NotificationSchema = new mongoose.Schema(
     },
     relatedId: {
       type: mongoose.Schema.Types.ObjectId,
-      refPath: 'relatedModel',
+      refPath: "relatedModel",
       default: null,
     },
     relatedModel: {
       type: String,
-      enum: ['Property', 'Message', 'System'],
+      enum: ["Property", "Message", "System"],
       default: null,
     },
     read: {
@@ -40,5 +40,4 @@ const NotificationSchema = new mongoose.Schema(
   }
 );
 
-
-export default mongoose.model('Notification', NotificationSchema);
+export default mongoose.model("Notification", NotificationSchema);

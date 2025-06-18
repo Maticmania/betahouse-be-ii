@@ -1,5 +1,5 @@
 // src/models/Property.js
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 
 const PropertySchema = new mongoose.Schema({
   title: {
@@ -32,19 +32,19 @@ const PropertySchema = new mongoose.Schema({
     basement: {
       type: String,
       // enum: ['none', 'full', 'partially finished', 'unfinished'],
-      default: 'none',
+      default: "none",
     },
     fireplace: { type: Boolean, default: false },
   },
   status: {
     type: String,
     // enum: ['available', 'sold', 'rented', 'pending'],
-    default: 'pending',
+    default: "pending",
   },
   priceType: {
     type: String,
-    enum: ['yearly', 'total'],
-    default: 'total',
+    enum: ["yearly", "total"],
+    default: "total",
   },
   forSale: {
     type: Boolean,
@@ -74,7 +74,7 @@ const PropertySchema = new mongoose.Schema({
   thumbnail: { type: String },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
+    ref: "User",
     required: true,
   },
   createdAt: {
@@ -120,4 +120,4 @@ const PropertySchema = new mongoose.Schema({
   ],
 });
 
-export default mongoose.model('Property', PropertySchema);
+export default mongoose.model("Property", PropertySchema);

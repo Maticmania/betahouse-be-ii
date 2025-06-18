@@ -1,8 +1,8 @@
-import multer from 'multer';
-import fs from 'fs';
-import path from 'path';
+import multer from "multer";
+import fs from "fs";
+import path from "path";
 
-const uploadPath = path.join('uploads');
+const uploadPath = path.join("uploads");
 
 if (!fs.existsSync(uploadPath)) {
   fs.mkdirSync(uploadPath);

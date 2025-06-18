@@ -3,7 +3,9 @@ import axios from "axios";
 export const getLocationFromIp = async (ip) => {
   try {
     if (ip === "::1" || ip === "127.0.0.1") return null; // skip local dev
-    const { data } = await axios.get(`https://ipinfo.io/${ip}?token=${process.env.IPINFO_TOKEN}`);
+    const { data } = await axios.get(
+      `https://ipinfo.io/${ip}?token=${process.env.IPINFO_TOKEN}`
+    );
     return {
       city: data.city,
       region: data.region,
