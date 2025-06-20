@@ -1,10 +1,11 @@
-// src/api/notification/notification.controller.js
 import {
   deleteNotificationservice,
   getNotifications,
   markAllNotificationsRead,
   markNotificationRead,
+  createNotification
 } from "../../services/notification.js";
+import User from "../../models/User.js";
 
 const getUserNotifications = async (req, res) => {
   try {
@@ -20,6 +21,31 @@ const getUserNotifications = async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+
+const notifyNewMessage = async (req, res) => {
+  try {
+    const { recipientId, senderId, propertyId, messageText } = req.body;
+
+    const sender = await User.findById(senderId).select("name");
+    const title = `New message from ${sender?.name || "someone"}`;
+    const content = messageText;
+
+    const notification = await createNotification(
+      recipientId,
+      "message",
+      content,
+      propertyId,
+      title,
+      "Message"
+    );
+
+    return res.status(201).json({ success: true, notification });
+  } catch (err) {
+    console.error("notifyNewMessage error:", err);
+    return res.status(500).json({ error: "Failed to send message notification" });
+  }
+};
+
 
 const markAsRead = async (req, res) => {
   try {
@@ -56,4 +82,5 @@ export {
   markAsRead,
   markAllNotifications,
   deleteNotification,
+  notifyNewMessage
 };

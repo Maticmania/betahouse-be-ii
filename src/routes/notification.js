@@ -5,12 +5,14 @@ import {
   getUserNotifications,
   markAllNotifications,
   markAsRead,
+  notifyNewMessage
 } from "../controllers/notification/notification.controller.js";
 import { authenticate } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
 router.get("/", authenticate, getUserNotifications);
+router.post("/message", authenticate, notifyNewMessage);
 router.put("/:notificationId/read", authenticate, markAsRead);
 router.put("/all", authenticate, markAllNotifications);
 router.delete("/:notificationId", authenticate, deleteNotification);
