@@ -25,7 +25,9 @@ export const generateRefreshToken = (userId) => {
 };
 const blacklistToken = async (token) => {
   const decoded = jwt.decode(token);
+  console.log("decoded token:", decoded);
   const expiresIn = decoded.exp - Math.floor(Date.now() / 1000);
+  console.log("Token expires in:", expiresIn, "seconds");
   await redisClient.set(`blacklist:${token}`, "blacklisted", "EX", expiresIn);
 };
 

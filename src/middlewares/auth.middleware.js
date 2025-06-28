@@ -1,5 +1,6 @@
 import { verifyToken } from "../utils/auth.js";
 import User from "../models/User.js";
+import Session from "../models/Session.js";
 
 const authenticate = async (req, res, next) => {
   const token = req.headers.authorization?.split(" ")[1];
@@ -12,6 +13,11 @@ const authenticate = async (req, res, next) => {
 
     req.user = user;
     req.sessionId = decoded.sessionId; // ✅ store sessionId
+
+    if (req.sessionId) {
+      await Session.findByIdAndUpdate(req.sessionId, { lastActive: new Date() });
+    }
+
     next();
   } catch (error) {
     res.status(401).json({ message: "Unauthorized", error: error.message });

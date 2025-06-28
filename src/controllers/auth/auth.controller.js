@@ -28,15 +28,30 @@ const createSession = async (user, refreshToken, req) => {
   const ip = req.ip;
   const location = await getLocationFromIp(ip);
 
-  const session = new Session({
+  // Try to find an existing session
+  let session = await Session.findOne({
     user: user._id,
-    refreshToken,
+    "device.ua": device.ua,
     ipAddress: ip,
-    device,
-    location,
   });
 
-  await session.save();
+  if (session) {
+    // If session exists, update it
+    session.refreshToken = refreshToken;
+    session.lastActive = Date.now();
+    await session.save();
+  } else {
+    // If no session, create a new one
+    session = new Session({
+      user: user._id,
+      refreshToken,
+      ipAddress: ip,
+      device,
+      location,
+    });
+    await session.save();
+  }
+
   return session;
 };
 
