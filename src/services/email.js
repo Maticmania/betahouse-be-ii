@@ -92,3 +92,24 @@ export const sendTwoFactorCodeEmail = async (to, otp) => {
     html,
   });
 };
+
+export const sendPasswordResetEmail = async (user, token) => {
+  const templatePath = path.join(__dirname, "../templates/reset-password.hbs");
+  const source = await readFile(templatePath, "utf-8");
+  const template = handlebars.compile(source);
+
+  const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+  const html = template({
+    name: user?.profile?.name || "there",
+    resetUrl,
+  });
+
+  return transporter.sendMail({
+    from: `"${process.env.EMAIL_FROM_NAME || "BetaHouse"}" <${
+      process.env.EMAIL_USER
+    }>`,
+    to: user.email,
+    subject: "Password Reset Request",
+    html,
+  });
+};

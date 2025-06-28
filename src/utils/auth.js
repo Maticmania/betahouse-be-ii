@@ -15,7 +15,7 @@ const comparePassword = async (password, hashedPassword) => {
 
 const generateToken = (userId, sessionId) => {
   return jwt.sign({ userId, sessionId }, process.env.JWT_SECRET, {
-    expiresIn: "1m",
+    expiresIn: "5d",
   });
 };
 export const generateRefreshToken = (userId) => {

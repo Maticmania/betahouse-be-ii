@@ -1,6 +1,6 @@
 import express from 'express';
 import passport from '../config/passport.config.js';
-import { signup, verifyEmail, UpdatePhone, login,verifyTwoFactorCode, resendTwoFactorCode, googleAuth, googleCallback, facebookAuth, facebookCallback, logout, getSessions, revokeSession, logoutAllOtherSessions ,refreshAccessToken,resendVerificationEmail,getMe } from '../controllers/auth/auth.controller.js';
+import { signup, verifyEmail, UpdatePhone, login,verifyTwoFactorCode, resendTwoFactorCode, googleAuth, googleCallback, facebookAuth, facebookCallback, logout, getSessions, revokeSession, logoutAllOtherSessions ,refreshAccessToken,resendVerificationEmail,getMe, forgotPassword, resetPassword } from '../controllers/auth/auth.controller.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
 import { send2FACode, verify2FACode, setupTwoFactor,disableTwoFactor,getTwoFactorStatus } from '../controllers/auth/twoFactor.controller.js';
 const router = express.Router();
@@ -9,6 +9,8 @@ router.post('/signup', signup);
 router.get('/verify-email', verifyEmail);
 router.post('/phone/update', authenticate, UpdatePhone);
 router.post('/login', login);
+router.post('/forgot-password', forgotPassword);
+router.post('/reset-password/:token', resetPassword);
 router.post('/verify-2fa', verifyTwoFactorCode);
 router.post('/refresh-token', refreshAccessToken);
 router.get('/me', authenticate, getMe);

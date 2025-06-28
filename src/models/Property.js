@@ -7,6 +7,10 @@ const PropertySchema = new mongoose.Schema({
     required: true,
     trim: true,
   },
+  slug: {
+    type: String,
+    unique: true,
+  },
   description: {
     type: String,
     required: true,
@@ -22,10 +26,12 @@ const PropertySchema = new mongoose.Schema({
       count: { type: Number, default: 1 },
       features: [{ type: String }],
     },
-    heating: {
-      type: [{ type: String }],
-      features: [{ type: String }],
-    },
+    heating: [
+      {
+        type: { type: String },
+        features: [{ type: String }],
+      },
+    ],
     appliances: {
       included: [{ type: String }],
     },
@@ -38,7 +44,7 @@ const PropertySchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    // enum: ['available', 'sold', 'rented', 'pending'],
+    enum: ["available", "sold", "rented", "pending", "draft", "rejected"],
     default: "pending",
   },
   priceType: {
@@ -56,7 +62,9 @@ const PropertySchema = new mongoose.Schema({
   },
   location: {
     state: { type: String, required: true },
-    country: { type: String, required: true },
+    lga: { type: String },
+    town: { type: String },
+    country: { type: String, required: true, default: "Nigeria" },
     address: { type: String },
     coordinates: {
       lat: Number,
@@ -80,6 +88,10 @@ const PropertySchema = new mongoose.Schema({
   createdAt: {
     type: Date,
     default: Date.now,
+  },
+
+  tourUrl: {
+    type: String,
   },
   views: {
     type: Number,

@@ -1,4 +1,3 @@
-// src/middleware/auth.js
 import { verifyToken } from "../utils/auth.js";
 import User from "../models/User.js";
 
@@ -28,4 +27,25 @@ const restrictTo = (...roles) => {
   };
 };
 
-export { authenticate, restrictTo };
+const optionalAuthenticate = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return next(); // No token? proceed
+
+  const token = authHeader.split(" ")[1];
+  if (!token) return next(); // Still no token? proceed
+
+  try {
+    const decoded = await verifyToken(token);
+    const user = await User.findById(decoded.userId).select("-password");
+    if (user) {
+      req.user = user;
+      req.sessionId = decoded.sessionId;
+    }
+  } catch (error) {
+    // Invalid token? Ignore and proceed unauthenticated
+  }
+
+  next();
+};
+
+export { authenticate, optionalAuthenticate, restrictTo };

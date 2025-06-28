@@ -18,8 +18,9 @@ import jwt from "jsonwebtoken";
 import { UAParser } from "ua-parser-js";
 import { getLocationFromIp } from "../../utils/location.js";
 import { generateCode } from "../../utils/auth.js";
-import { sendTwoFactorCodeEmail } from "../../services/email.js";
+import { sendTwoFactorCodeEmail ,sendPasswordResetEmail } from "../../services/email.js";
 import TwoFactorToken from "../../models/TwoFactorToken.js";
+import crypto from "crypto";
 
 const createSession = async (user, refreshToken, req) => {
   const parser = new UAParser(req.headers["user-agent"]);
@@ -451,6 +452,66 @@ const getMe = async (req, res) => {
   }
 };
 
+const forgotPassword = async (req, res) => {
+  const { email } = req.body;
+  try {
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+    // Check if user exists
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    // Generate reset token
+    const resetToken = crypto.randomBytes(20).toString("hex");
+    user.resetPasswordToken = resetToken;
+    user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
+    await user.save();
+    // Send email
+    await sendPasswordResetEmail(user, resetToken);
+    res.status(200).json({ message: "Password reset email sent" });
+  } catch (error) {
+    console.error("Forgot password error:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+const resetPassword = async (req, res) => {
+  console.log("Reset password request received");
+  const { token } = req.params;
+  const { password } = req.body;
+  try {
+    if (!token || !password) {
+      return res.status(400).json({ message: "Token and password are required" });
+    }
+    const user = await User.findOne({
+      resetPasswordToken: token,
+      resetPasswordExpires: { $gt: Date.now() },
+    });
+    if (!user) {
+      return res.status(400).json({ message: "Invalid or expired token" });
+    }
+    // Reset password
+    user.password = await hashPassword(password);
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+    await user.save();
+
+    // Invalidate all user sessions
+    const sessions = await Session.find({ user: user._id });
+    for (const session of sessions) {
+      await blacklistToken(session.refreshToken);
+    }
+    await Session.deleteMany({ user: user._id });
+
+    res.status(200).json({ message: "Password has been reset" });
+  } catch (error) {
+    console.error("Reset password error:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
 export {
   signup,
   verifyEmail,
@@ -469,4 +530,6 @@ export {
   logoutAllOtherSessions,
   refreshAccessToken,
   getMe,
+  forgotPassword,
+  resetPassword,
 };

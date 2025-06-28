@@ -10,7 +10,7 @@ import { connectDB } from './src/config/db.config.js';
 import passport from './src/config/passport.config.js';
 import authRoutes from './src/routes/auth.routes.js';
 import notificationRoutes from './src/routes/notification.js';
-import propertyRoutes from './src/routes/property.js';
+import propertyRoutes from './src/routes/property.routes.js';
 import agentRoutes from './src/routes/agent.js';
 import userRoutes from './src/routes/user.js';
 
@@ -18,7 +18,7 @@ import userRoutes from './src/routes/user.js';
 
 
 const app = express();
-const allowedOrigins = ["http://localhost:3000", "https://yourfrontend.com"]
+const allowedOrigins = ["http://localhost:3000", "http://localhost:3001", "https://yourfrontend.com", "http://localhost:5000"]
 
 // Middleware
 app.use(express.json());
@@ -31,7 +31,7 @@ app.use(
         callback(new Error("Not allowed by CORS"))
       }
     },
-    credentials: true, // ✅ allow cookies/token
+    credentials: true,
   })
 )
 app.use(morgan('dev'));
@@ -43,55 +43,6 @@ app.use(
   })
 );
 app.use(passport.initialize());
-const server = createServer(app);
-const wss = new WebSocketServer({ server, path: "/ws" });
-
-// Store connected clients
-// const clients = new Map();
-
-// wss.on("connection", (ws, req) => {
-//   const params = new URLSearchParams(req.url.split("?")[1]);
-//   const token = params.get("token");
-
-//   // Validate token (you can use your own logic here)
-//   let userId;
-//   try {
-//     const decoded = jwt.verify(token, process.env.JWT_SECRET); // optional
-//     userId = decoded.id;
-//     clients.set(userId, ws);
-//     console.log(`User ${userId} connected via WebSocket`);
-//   } catch (err) {
-//     console.error("Invalid token", err);
-//     ws.close();
-//     return;
-//   }
-
-//   ws.on("message", (message) => {
-//     try {
-//       const data = JSON.parse(message);
-//       console.log("Received:", data);
-
-//       // Echo the message or handle routing logic here
-//       if (data.type === "message") {
-//         // Example: broadcast to all
-//         for (const [uid, client] of clients) {
-//           if (client.readyState === 1) {
-//             client.send(JSON.stringify({ type: "message", payload: data.payload }));
-//           }
-//         }
-//       }
-//     } catch (err) {
-//       console.error("Error handling message:", err);
-//     }
-//   });
-
-//   ws.on("close", () => {
-//     console.log(`User ${userId} disconnected`);
-//     clients.delete(userId);
-//   });
-// });
- 
-
 const PORT = process.env.PORT || 6000;
 const MONGO_URI = process.env.MONGO_URI;
 
