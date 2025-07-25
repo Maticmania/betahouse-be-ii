@@ -261,77 +261,105 @@ const listProperties = async (req, res) => {
     const {
       page = 1,
       limit = 10,
+      search,
+      location,
+      state,
+      propertyType,
+      forSale,
+      bedrooms,
+      bathrooms,
       minPrice,
       maxPrice,
-      propertyType,
-      state,
-      location,
+      minArea,
+      maxArea,
+      yearBuiltMin,
+      yearBuiltMax,
+      hasParking,
+      hasFireplace,
+      isFeatured,
       features,
-      forSale,
       sortBy = "score",
-      order = "desc",
+      order = "asc",
     } = req.query;
 
     const query = { status: { $in: ["available"] } };
 
-    if (minPrice) query.price = { ...query.price, $gte: Number(minPrice) };
-    if (maxPrice) query.price = { ...query.price, $lte: Number(maxPrice) };
-    if (propertyType) query.propertyType = propertyType;
+    // --- Basic string filters
+    if (propertyType && propertyType !== "all") query.propertyType = propertyType;
     if (state) query["location.state"] = state;
     if (location) query["location.city"] = location;
-    if (features) query.features = { $all: features.split(",") };
     if (forSale !== undefined) query.forSale = forSale === "true";
+
+    // --- Numeric filters
+    if (bedrooms) query.bedrooms = { $gte: Number(bedrooms) };
+    if (bathrooms) query.bathrooms = { $gte: Number(bathrooms) };
+    if (minPrice) query.price = { ...query.price, $gte: Number(minPrice) };
+    if (maxPrice) query.price = { ...query.price, $lte: Number(maxPrice) };
+    if (minArea) query.area = { ...query.area, $gte: Number(minArea) };
+    if (maxArea) query.area = { ...query.area, $lte: Number(maxArea) };
+    if (yearBuiltMin) query.yearBuilt = { ...query.yearBuilt, $gte: Number(yearBuiltMin) };
+    if (yearBuiltMax) query.yearBuilt = { ...query.yearBuilt, $lte: Number(yearBuiltMax) };
+
+    // --- Boolean features
+    if (hasParking !== undefined) query.hasParking = hasParking === "true";
+    if (hasFireplace !== undefined) query.hasFireplace = hasFireplace === "true";
+    if (isFeatured !== undefined) query.isFeatured = isFeatured === "true";
+
+    // --- Features (amenities) array
+    if (features) {
+      const featuresArray = Array.isArray(features) ? features : features.split(",");
+      query.features = { $all: featuresArray };
+    }
+
+    // --- Search query
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    const user = req.user ? await User.findById(req.user._id).lean() : null;
 
     let properties = await Property.find(query)
       .populate("createdBy", "profile.name")
       .lean();
 
-    // Apply AI-driven personalization for logged-in users
-    if (req.user) {
-      const user = await User.findById(req.user._id).lean();
+    // --- Apply preference score if user is logged in
+    if (user) {
       properties = properties.map((property) => ({
         ...property,
         score: calculatePreferenceScore(property, user),
       }));
-
-      // Sort by score or other criteria
-      properties.sort((a, b) => {
-        if (sortBy === "score") {
-          return order === "desc"
-            ? (b.score || 0) - (a.score || 0)
-            : (a.score || 0) - (b.score || 0);
-        }
-        const aVal = a[sortBy] || 0;
-        const bVal = b[sortBy] || 0;
-        return order === "desc" ? bVal - aVal : aVal - bVal;
-      });
-    } else {
-      // Default sorting for non-logged-in users
-      properties.sort((a, b) => {
-        const aVal = a[sortBy] || 0;
-        const bVal = b[sortBy] || 0;
-        return order === "desc" ? bVal - aVal : aVal - bVal;
-      });
     }
 
-    // Paginate results
+    // --- Sort
+    const sortField = sortBy === "score" && user ? "score" : sortBy;
+    const sortDir = order === "asc" ? 1 : -1;
+
+    properties.sort((a, b) => {
+      const aVal = a[sortField] || 0;
+      const bVal = b[sortField] || 0;
+      return sortDir * (bVal - aVal);
+    });
+
+    // --- Pagination
     const startIndex = (page - 1) * limit;
-    const paginatedProperties = properties.slice(
-      startIndex,
-      startIndex + Number(limit)
-    );
+    const paginatedProperties = properties.slice(startIndex, startIndex + Number(limit));
     const total = properties.length;
 
-    res.status(200).json({
+    return res.status(200).json({
       properties: paginatedProperties,
       total,
       page: Number(page),
       pages: Math.ceil(total / limit),
     });
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    console.error("listProperties error:", error);
+    return res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+
 
 // List properties for agent/admin
 const listMyProperties = async (req, res) => {

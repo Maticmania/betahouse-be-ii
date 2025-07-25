@@ -43,8 +43,8 @@ router.get("/slug/:slug", getPropertyBySlug); // 🆔 Get property using SEO-fri
 
 
 // Wishlist
-router.post("/:id/wishlist", authenticate, restrictTo("user"), toggleWishlist); // ❤️ Add/remove property to/from wishlist
-router.get("/saved/my", authenticate, restrictTo("user"), getMyWishlist); // 📁 Get user's saved properties
+router.post("/:id/wishlist", authenticate, toggleWishlist); // ❤️ Add/remove property to/from wishlist
+router.get("/saved/my", authenticate, getMyWishlist); // 📁 Get user's saved properties
 
 // Moderation
 router.put("/:id/status", authenticate, restrictTo("admin"), updatePropertyStatus); // ✅ Admin updates status (available/sold/etc.)
