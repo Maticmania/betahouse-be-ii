@@ -1,12 +1,7 @@
 // src/routes/agent.js
 import express from "express";
-import {
-  submitKYC,
-  getKYCStatus,
-  reviewKYC,
-  listKYCs,
-} from "../controllers/agent/agent.controller.js";
-import { authenticate, restrictTo } from "../middlewares/auth.middleware.js";
+import { submitKYC, getKYCStatus, reviewKYC, listKYCs } from "./agent.controller.js";
+import { authenticate, restrictTo } from "../../middlewares/auth.middleware.js";
 import multer from "multer";
 
 const router = express.Router();

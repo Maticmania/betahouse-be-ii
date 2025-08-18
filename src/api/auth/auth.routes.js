@@ -1,8 +1,8 @@
 import express from 'express';
-import passport from '../config/passport.config.js';
-import { signup, verifyEmail, UpdatePhone, login,verifyTwoFactorCode, resendTwoFactorCode, googleAuth, googleCallback, facebookAuth, facebookCallback, logout, getSessions, revokeSession, logoutAllOtherSessions ,refreshAccessToken,resendVerificationEmail,getMe, forgotPassword, resetPassword } from '../controllers/auth/auth.controller.js';
-import { authenticate } from '../middlewares/auth.middleware.js';
-import { send2FACode, verify2FACode, setupTwoFactor,disableTwoFactor,getTwoFactorStatus } from '../controllers/auth/twoFactor.controller.js';
+import passport from '../../config/passport.config.js';
+import { signup, verifyEmail, UpdatePhone, login,verifyTwoFactorCode, resendTwoFactorCode, googleAuth, googleCallback, facebookAuth, facebookCallback, logout, getSessions, revokeSession, logoutAllOtherSessions ,refreshAccessToken,resendVerificationEmail,getMe, forgotPassword, resetPassword } from './auth.controller.js';
+import { authenticate } from '../../middlewares/auth.middleware.js';
+import { send2FACode, verify2FACode, setupTwoFactor,disableTwoFactor,getTwoFactorStatus } from './twoFactor.controller.js';
 const router = express.Router();
 
 router.post('/signup', signup);

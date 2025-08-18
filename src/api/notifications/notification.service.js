@@ -1,7 +1,7 @@
-import Notification from "../models/Notification.js";
-import redisClient from "../config/redis.config.js";
-import { sendNotificationEmail } from "./email.js";
-import User from "../models/User.js";
+import Notification from "../../models/Notification.js";
+import redisClient from "../../config/redis.config.js";
+import { sendNotificationEmail } from "../../services/email.js";
+import User from "../../models/User.js";
 
 
 /**
@@ -204,19 +204,57 @@ export const markAllNotificationsRead = async (userId) => {
 /**
  * Deletes a notification
  */
-export const deleteNotificationservice = async (userId, notificationId) => {
-  try {
-    const notification = await Notification.findOneAndDelete({
-      _id: notificationId,
-      user: userId,
-    });
-    if (!notification) throw new Error("Notification not found");
+export const notifyNewMessage = async (io, onlineUsers, recipientId, senderId, propertyId, messageText) => {
+    const sender = await User.findById(senderId).select("name");
+    const title = `New message from ${sender?.name || "someone"}`;
+    const content = messageText;
 
-    // Remove from Redis cache
-    await redisClient.del(`notifications:${userId}:${notification._id}`);
+    const notification = await createNotification(
+        io,
+        onlineUsers,
+        recipientId,
+        "message",
+        content,
+        propertyId,
+        title,
+        "Message"
+    );
 
-    return { message: "Notification deleted successfully" };
-  } catch (err) {
-    throw new Error(`Failed to delete notification: ${err.message}`);
-  }
+    return notification;
+};
+
+export const sendTestNotification = async (io, onlineUsers, userId, message) => {
+    const socketId = onlineUsers.get(userId);
+
+    if (socketId) {
+        io.to(socketId).emit("notification", { message });
+        console.log(`📩 Sent to user ${userId}: ${message}`);
+
+        const notification = await createNotification(
+            io,
+            onlineUsers,
+            userId,
+            "system",
+            message,
+            null,
+            "Test Notification",
+            "System"
+        );
+
+        return { delivered: true, notification };
+    } else {
+        const notification = await createNotification(
+            io,
+            onlineUsers,
+            userId,
+            "system",
+            message,
+            null,
+            "Test Notification (offline)",
+            "System"
+        );
+
+        console.log(`💾 User ${userId} offline. Notification saved.`);
+        return { delivered: false, notification };
+    }
 };

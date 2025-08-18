@@ -1,19 +1,8 @@
 // src/routes/user.js
 import express from 'express';
-import {
-  listUsers,
-  deleteUser,
-  addAgentReview,
-  getAgentProfile,
-  getAllAgents,
-  updateProfile,
-  updateUserProfile,
-  deleteUserSelf,
-  updateEmail,
-  updatePassword
-} from '../controllers/user/user.controller.js';
-import { authenticate, restrictTo } from '../middlewares/auth.middleware.js';
-import {upload} from '../middlewares/upload.middleware.js'; 
+import { listUsers, deleteUser, addAgentReview, getAgentProfile, getAllAgents, updateProfile, updateUserProfile, deleteUserSelf, updateEmail, updatePassword } from './user.controller.js';
+import { authenticate, restrictTo } from '../../middlewares/auth.middleware.js';
+import {upload} from '../../middlewares/upload.middleware.js'; 
 
 const router = express.Router();
 

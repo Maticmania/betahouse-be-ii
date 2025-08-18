@@ -62,8 +62,8 @@ const PropertySchema = new mongoose.Schema({
   },
   location: {
     state: { type: String, required: true },
-    lga: { type: String },
-    town: { type: String },
+    lga: { type: String }, 
+    city: { type: String },
     country: { type: String, required: true, default: "Nigeria" },
     address: { type: String },
     coordinates: {

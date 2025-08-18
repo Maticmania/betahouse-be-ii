@@ -13,7 +13,16 @@ const NotificationSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ["message", "property", "system"],
+      enum: [
+        "message",
+        "property",
+        "system",
+        "kyc_submitted",
+        "kyc_approved",
+        "kyc_rejected",
+        "profile_updated",
+        "agent_review",
+      ],
       required: true,
     },
     content: {
@@ -27,7 +36,7 @@ const NotificationSchema = new mongoose.Schema(
     },
     relatedModel: {
       type: String,
-      enum: ["Property", "Message", "System"],
+      enum: ["Property", "Message", "System", "AgentKYC", "User"],
       default: null,
     },
     read: {

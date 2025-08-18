@@ -116,9 +116,19 @@ const createProperty = async (req, res) => {
 
     await property.save();
 
+    // Invalidate cache
+    const keys = await redisClient.keys("properties:*");
+    if (keys.length > 0) {
+      await redisClient.del(keys);
+    }
+
+    const io = req.app.get("io");
+    const onlineUsers = req.app.get("onlineUsers");
     const admins = await User.find({ role: "admin" });
     for (const admin of admins) {
       await createNotification(
+        io,
+        onlineUsers,
         admin._id,
         "property",
         `New property "${title}" submitted by ${req.user.profile.name} (@${req.user.username}) for approval.`,
@@ -211,6 +221,12 @@ const updateProperty = async (req, res) => {
 
     await property.save();
 
+    // Invalidate cache
+    const keys = await redisClient.keys("properties:*");
+    if (keys.length > 0) {
+      await redisClient.del(keys);
+    }
+
     res.status(200).json({ message: "Property updated", property });
   } catch (error) {
     console.log("Error updating properties", error.message, error);
@@ -243,11 +259,19 @@ const deleteProperty = async (req, res) => {
         const safeUsername = req.user.username.replace(/[^a-zA-Z0-9-_]/g, "_");
         const folderName = `Betahouse/${safeUsername}/properties`;
         const publicId = imageUrl.split("/").pop().split(".")[0];
-        await cloudinary.uploader.destroy(`Betahouse/${safeUsername}/properties/${publicId}`);
+        await cloudinary.uploader.destroy(
+          `Betahouse/${safeUsername}/properties/${publicId}`
+        );
       }
     }
 
     await property.deleteOne();
+
+    // Invalidate cache
+    const keys = await redisClient.keys("properties:*");
+    if (keys.length > 0) {
+      await redisClient.del(keys);
+    }
 
     res.status(200).json({ message: "Property deleted" });
   } catch (error) {
@@ -255,15 +279,17 @@ const deleteProperty = async (req, res) => {
   }
 };
 
-// List properties with personalized sorting
+// List properties with better performance
+// List properties with better performance
 const listProperties = async (req, res) => {
   try {
     const {
       page = 1,
-      limit = 10,
+      limit = 30,
       search,
-      location,
       state,
+      lga,
+      location,
       propertyType,
       forSale,
       bedrooms,
@@ -279,87 +305,137 @@ const listProperties = async (req, res) => {
       isFeatured,
       features,
       sortBy = "score",
-      order = "asc",
+      sortOrder = "asc", // ✅ fixed naming
     } = req.query;
 
-    const query = { status: { $in: ["available"] } };
+    const cacheKey = `properties:${JSON.stringify(req.query)}`;
+    const cachedData = await redisClient.get(cacheKey);
+    if (cachedData) return res.status(200).json(JSON.parse(cachedData));
 
-    // --- Basic string filters
+    const query = { status: "available" };
+    const orConditions = [];
+
+    // --- Filters ---
     if (propertyType && propertyType !== "all") query.propertyType = propertyType;
-    if (state) query["location.state"] = state;
-    if (location) query["location.city"] = location;
+    if (state) query["address.state"] = state;
+    if (lga) query.lga = lga;
     if (forSale !== undefined) query.forSale = forSale === "true";
 
-    // --- Numeric filters
-    if (bedrooms) query.bedrooms = { $gte: Number(bedrooms) };
-    if (bathrooms) query.bathrooms = { $gte: Number(bathrooms) };
-    if (minPrice) query.price = { ...query.price, $gte: Number(minPrice) };
-    if (maxPrice) query.price = { ...query.price, $lte: Number(maxPrice) };
-    if (minArea) query.area = { ...query.area, $gte: Number(minArea) };
-    if (maxArea) query.area = { ...query.area, $lte: Number(maxArea) };
-    if (yearBuiltMin) query.yearBuilt = { ...query.yearBuilt, $gte: Number(yearBuiltMin) };
-    if (yearBuiltMax) query.yearBuilt = { ...query.yearBuilt, $lte: Number(yearBuiltMax) };
+    if (bedrooms) query["details.bedrooms"] = { $gte: Number(bedrooms) };
+    if (bathrooms) query["details.bathrooms"] = { $gte: Number(bathrooms) };
 
-    // --- Boolean features
-    if (hasParking !== undefined) query.hasParking = hasParking === "true";
-    if (hasFireplace !== undefined) query.hasFireplace = hasFireplace === "true";
+    if (minPrice || maxPrice) {
+      query.price = {};
+      if (minPrice) query.price.$gte = Number(minPrice);
+      if (maxPrice) query.price.$lte = Number(maxPrice);
+    }
+
+    if (minArea || maxArea) {
+      query["details.area.totalStructure"] = {};
+      if (minArea) query["details.area.totalStructure"].$gte = Number(minArea);
+      if (maxArea) query["details.area.totalStructure"].$lte = Number(maxArea);
+    }
+
+    if (yearBuiltMin || yearBuiltMax) {
+      query["construction.yearBuilt"] = {};
+      if (yearBuiltMin) query["construction.yearBuilt"].$gte = Number(yearBuiltMin);
+      if (yearBuiltMax) query["construction.yearBuilt"].$lte = Number(yearBuiltMax);
+    }
+
+    if (hasParking !== undefined) {
+      query["parking.totalSpaces"] = hasParking === "true" ? { $gt: 0 } : 0;
+    }
+
+    if (hasFireplace !== undefined) query["details.fireplace"] = hasFireplace === "true";
     if (isFeatured !== undefined) query.isFeatured = isFeatured === "true";
 
-    // --- Features (amenities) array
     if (features) {
-      const featuresArray = Array.isArray(features) ? features : features.split(",");
-      query.features = { $all: featuresArray };
+      const featuresArray = Array.isArray(features)
+        ? features
+        : features.split(",").map(f => f.trim());
+      if (featuresArray.length > 0) {
+        query.features = { $all: featuresArray };
+      }
     }
 
-    // --- Search query
+    // --- Text Search ---
     if (search) {
-      query.$or = [
+      orConditions.push(
         { title: { $regex: search, $options: "i" } },
-        { description: { $regex: search, $options: "i" } },
-      ];
+        { description: { $regex: search, $options: "i" } }
+      );
     }
+
+    // --- Location Search ---
+    if (location) {
+      const regex = new RegExp(location, "i");
+      orConditions.push(
+        { "address.state": regex },
+        { "address.city": regex },
+        { "address.street": regex },
+        { "address.area": regex }, // ✅ ensure area is checked
+        { lga: regex },
+        { town: regex }
+      );
+    }
+
+    if (orConditions.length > 0) {
+      query.$or = orConditions;
+    }
+
+    // --- Sorting ---
+    const sortDir = sortOrder === "asc" ? 1 : -1;
+    let properties;
+    let total;
 
     const user = req.user ? await User.findById(req.user._id).lean() : null;
 
-    let properties = await Property.find(query)
-      .populate("createdBy", "profile.name")
-      .lean();
+    if (sortBy === "score" && user) {
+      // Load a reasonable cap for scoring
+      let all = await Property.find(query)
+        .populate("createdBy", "profile.name")
+        .limit(200)
+        .lean();
 
-    // --- Apply preference score if user is logged in
-    if (user) {
-      properties = properties.map((property) => ({
-        ...property,
-        score: calculatePreferenceScore(property, user),
+      // Compute user-preference score
+      all = all.map((p) => ({
+        ...p,
+        score: calculatePreferenceScore(p, user),
       }));
+
+      // Manual sort
+      all.sort((a, b) => sortDir * (b.score - a.score));
+
+      // Paginate
+      properties = all.slice((page - 1) * limit, (page - 1) * limit + Number(limit));
+      total = all.length;
+    } else {
+      // MongoDB handles sorting/pagination
+      properties = await Property.find(query)
+        .populate("createdBy", "profile.name")
+        .sort({ [sortBy]: sortDir })
+        .skip((page - 1) * limit)
+        .limit(Number(limit))
+        .lean();
+
+      total = await Property.countDocuments(query);
     }
 
-    // --- Sort
-    const sortField = sortBy === "score" && user ? "score" : sortBy;
-    const sortDir = order === "asc" ? 1 : -1;
-
-    properties.sort((a, b) => {
-      const aVal = a[sortField] || 0;
-      const bVal = b[sortField] || 0;
-      return sortDir * (bVal - aVal);
-    });
-
-    // --- Pagination
-    const startIndex = (page - 1) * limit;
-    const paginatedProperties = properties.slice(startIndex, startIndex + Number(limit));
-    const total = properties.length;
-
-    return res.status(200).json({
-      properties: paginatedProperties,
+    const response = {
+      properties,
       total,
       page: Number(page),
       pages: Math.ceil(total / limit),
-    });
+    };
+
+    await redisClient.set(cacheKey, JSON.stringify(response), "EX", 600); // cache for 10 mins
+    return res.status(200).json(response);
+
   } catch (error) {
     console.error("listProperties error:", error);
     return res.status(500).json({ message: "Server error", error: error.message });
   }
 };
-
 
 // List properties for agent/admin
 const listMyProperties = async (req, res) => {
@@ -477,7 +553,7 @@ const toggleWishlist = async (req, res) => {
   }
 };
 
-  //get wishlist (User only)
+//get wishlist (User only)
 const getMyWishlist = async (req, res) => {
   try {
     const user = await User.findById(req.user._id).populate({
@@ -496,7 +572,6 @@ const getMyWishlist = async (req, res) => {
     });
   }
 };
-
 
 // Approve/reject property (Admin only)
 const updatePropertyStatus = async (req, res) => {
@@ -517,7 +592,11 @@ const updatePropertyStatus = async (req, res) => {
     await property.save();
 
     const agent = await User.findById(property.createdBy);
+    const io = req.app.get("io");
+    const onlineUsers = req.app.get("onlineUsers");
     await createNotification(
+      io,
+      onlineUsers,
       agent._id,
       "property", // match your schema
       `Your property "${property.title}" has been ${status}.`,
@@ -546,7 +625,11 @@ const toggleFeatured = async (req, res) => {
     await property.save();
 
     const agent = await User.findById(property.createdBy);
+    const io = req.app.get("io");
+    const onlineUsers = req.app.get("onlineUsers");
     await createNotification(
+      io,
+      onlineUsers,
       agent._id,
       "property", // match schema enum
       `Your property "${property.title}" has been ${
@@ -569,10 +652,13 @@ const toggleFeatured = async (req, res) => {
 // GET /properties/search
 const searchProperties = async (req, res) => {
   try {
-    const { keyword, state, lga, minPrice, maxPrice, propertyType } = req.query;
+    const { keyword, state, lga, minPrice, maxPrice, propertyType, location } =
+      req.query;
     const cacheKey = `property:search:${keyword || "_"}:${state || "_"}:${
       lga || "_"
-    }:${minPrice || 0}:${maxPrice || "_"}:${propertyType || "_"}`;
+    }:${location || "_"}:${minPrice || 0}:${maxPrice || "_"}:${
+      propertyType || "_"
+    }`;
 
     const cached = await redisClient.get(cacheKey);
     if (cached) return res.status(200).json(JSON.parse(cached));
@@ -596,7 +682,6 @@ const searchProperties = async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
-
 
 // GET /properties/stats/general
 const getGeneralPropertyStats = async (req, res) => {
@@ -781,9 +866,13 @@ const submitPropertyDraft = async (req, res) => {
     property.status = "pending";
     await property.save();
 
+    const io = req.app.get("io");
+    const onlineUsers = req.app.get("onlineUsers");
     const admins = await User.find({ role: "admin" });
     for (const admin of admins) {
       await createNotification(
+        io,
+        onlineUsers,
         admin._id,
         "property",
         `New property "${property.title}" submitted by ${req.user.profile.name} (@${req.user.username}) for approval.`,
@@ -825,9 +914,13 @@ const triggerPropertyNotification = async (req, res) => {
     if (!property)
       return res.status(404).json({ message: "Property not found" });
 
+    const io = req.app.get("io");
+    const onlineUsers = req.app.get("onlineUsers");
     const admins = await User.find({ role: "admin" });
     for (const admin of admins) {
       await createNotification(
+        io,
+        onlineUsers,
         admin._id,
         "property",
         `Reminder for property update: ${property.title}`,
@@ -844,7 +937,6 @@ const triggerPropertyNotification = async (req, res) => {
       .json({ message: "Failed to trigger notification", error: err.message });
   }
 };
-
 
 // GET /properties/slug/:slug
 const getPropertyBySlug = async (req, res) => {
@@ -887,5 +979,4 @@ export {
   getAgentPropertyStats,
   getGeneralPropertyStats,
   searchProperties,
-
 };

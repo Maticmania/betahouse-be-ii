@@ -1,17 +1,6 @@
 // src/routes/property.js
 import express from "express";
-import {
-  createProperty,
-  updateProperty,
-  deleteProperty,
-  listProperties,
-  getProperty,
-  getPropertyBySlug,
-  toggleWishlist,
-  updatePropertyStatus,
-  toggleFeatured,
-  listMyProperties,
-  searchProperties,              // 🔍 Filter properties by keyword
+import { createProperty, updateProperty, deleteProperty, listProperties, getProperty, getPropertyBySlug, toggleWishlist, updatePropertyStatus, toggleFeatured, listMyProperties, searchProperties,              // 🔍 Filter properties by keyword
   getGeneralPropertyStats,       // 📊 Get global stats: total, available, sold
   getAgentPropertyStats,         // 📈 Get property stats for specific agent
   deletePropertyImage,           // 🗑️ Delete an image from a property
@@ -20,10 +9,10 @@ import {
   listMyDrafts,                  // 📄 Get current agent's drafts
   triggerPropertyNotification,   // 🔔 Trigger a reminder notification about a property
   getMyWishlist           // ❤️ List all properties saved by user
-} from "../controllers/property/property.controller.js";
+} from "./property.controller.js";
 
-import { authenticate, restrictTo, optionalAuthenticate } from "../middlewares/auth.middleware.js";
-import { upload } from "../middlewares/upload.middleware.js";
+import { authenticate, restrictTo, optionalAuthenticate } from "../../middlewares/auth.middleware.js";
+import { upload } from "../../middlewares/upload.middleware.js";
 
 const router = express.Router();
 

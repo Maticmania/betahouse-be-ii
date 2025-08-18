@@ -28,8 +28,9 @@ passport.use(
       clientID: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
       callbackURL: `${process.env.BASE_URL}/api/v2/auth/google/callback`,
+      passReqToCallback: true,
     },
-    async (accessToken, refreshToken, profile, done) => {
+    async (req, accessToken, refreshToken, profile, done) => {
       try {
         const email = profile.emails[0].value;
         let user = await User.findOne({ $or: [{ googleId: profile.id }, { email }] });
@@ -41,7 +42,11 @@ passport.use(
             await user.save();
 
             // Optional: Notify user that Google is now linked
+            const io = req.app.get("io");
+            const onlineUsers = req.app.get("onlineUsers");
             await createNotification(
+              io,
+              onlineUsers,
               user._id,
               "system",
               `Your Google account is now linked. Enjoy seamless logins.`,
@@ -65,7 +70,11 @@ passport.use(
         await user.save();
 
         // Send welcome notification
+        const io = req.app.get("io");
+        const onlineUsers = req.app.get("onlineUsers");
         await createNotification(
+          io,
+          onlineUsers,
           user._id,
           "system",
           `Thank you for joining BetaHouse, ${user.profile.name}! Start exploring properties now!`,
@@ -92,8 +101,9 @@ passport.use(
       clientSecret: process.env.FACEBOOK_CLIENT_SECRET,
       callbackURL: `${process.env.BASE_URL}/api/auth/facebook/callback`,
       profileFields: ["id", "emails", "name"],
+      passReqToCallback: true,
     },
-    async (accessToken, refreshToken, profile, done) => {
+    async (req, accessToken, refreshToken, profile, done) => {
       try {
         let user = await User.findOne({ facebookId: profile.id });
         if (!user) {
@@ -106,7 +116,11 @@ passport.use(
             isEmailVerified: true,
           });
           await user.save();
+          const io = req.app.get("io");
+          const onlineUsers = req.app.get("onlineUsers");
           await createNotification(
+            io,
+            onlineUsers,
             user._id,
             "system", // type
             "Thank you for joining BetaHouse, " +

@@ -131,7 +131,11 @@ const updatePassword = async (req, res) => {
     await user.save();
     // ✅ Clear cache
 
+    const io = req.app.get("io");
+    const onlineUsers = req.app.get("onlineUsers");
     await createNotification(
+      io,
+      onlineUsers,
       user._id,
       "system",
       `Hello ${user.profile.name}, your password has been successfully updated. If you did not request this change, please contact support immediately.`,
@@ -181,12 +185,18 @@ const updateUserProfile = async (req, res) => {
       user.profile.photo = result.secure_url;
     }
     await user.save();
+    const io = req.app.get("io");
+    const onlineUsers = req.app.get("onlineUsers");
     // Notify user of updates
     await createNotification(
+      io,
+      onlineUsers,
       user._id,
       "profile_updated",
       `Your profile (@${user.username}) has been updated by an admin.`,
-      user._id
+      user._id,
+      "Profile Update",
+      "User"
     );
     // Clear cache
     await redisClient.del(`user:${user._id}`);
@@ -296,12 +306,18 @@ const addAgentReview = async (req, res) => {
 
     await agent.save();
 
+    const io = req.app.get("io");
+    const onlineUsers = req.app.get("onlineUsers");
     // Notify agent
     await createNotification(
+      io,
+      onlineUsers,
       agent._id,
       "agent_review",
       `You received a ${rating}-star review from @${req.user.username}: "${comment}"`,
-      agent._id
+      agent._id,
+      "New Agent Review",
+      "User"
     );
 
     // Clear cache
