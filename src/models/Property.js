@@ -1,4 +1,3 @@
-// src/models/Property.js
 import mongoose from "mongoose";
 
 const PropertySchema = new mongoose.Schema({
@@ -37,7 +36,6 @@ const PropertySchema = new mongoose.Schema({
     },
     basement: {
       type: String,
-      // enum: ['none', 'full', 'partially finished', 'unfinished'],
       default: "none",
     },
     fireplace: { type: Boolean, default: false },
@@ -74,11 +72,10 @@ const PropertySchema = new mongoose.Schema({
   },
   propertyType: {
     type: String,
-    // enum: ['apartment', 'house', 'condo', 'land', 'single-family', 'bungalow'],
     required: true,
   },
   features: [{ type: String }],
-  images: [{ type: String }], // Up to 30 Cloudinary URLs
+  images: [{ type: String }], 
   thumbnail: { type: String },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,

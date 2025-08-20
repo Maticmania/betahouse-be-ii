@@ -3,147 +3,27 @@ import User from "../../models/User.js";
 import { cloudinary } from "../../config/cloudinary.config.js";
 import { createNotification } from "../../services/notification.js";
 import redisClient from "../../config/redis.config.js";
+import { createPropertyService } from "./property.service.js";
 import slugify from "slugify";
-// Helper function for AI-driven scoring
-const calculatePreferenceScore = (property, user) => {
-  let score = 0;
-  const { preferences } = user;
-
-  if (!preferences) return score;
-
-  // Price range match
-  if (preferences.priceRange) {
-    if (
-      property.price >= preferences.priceRange.min &&
-      property.price <= preferences.priceRange.max
-    ) {
-      score += 30;
-    }
-  }
-
-  // Property type match
-  if (
-    preferences.propertyType &&
-    preferences.propertyType.includes(property.propertyType)
-  ) {
-    score += 20;
-  }
-
-  // Feature match
-  if (preferences.features) {
-    const matchedFeatures = property.features.filter((f) =>
-      preferences.features.includes(f)
-    );
-    score += matchedFeatures.length * 10;
-  }
-
-  // Boost featured properties
-  if (property.isFeatured) score += 50;
-
-  // Boost by views and saved count
-  score += property.views * 0.1;
-  score += property.savedCount * 0.5;
-
-  return score;
-};
 
 // Create a property (Agent only)
 const createProperty = async (req, res) => {
   try {
-    if (req.user.role !== "agent") {
-      return res
-        .status(403)
-        .json({ message: "Only agents can create properties" });
-    }
-
-    const {
-      title,
-      description,
-      price,
-      priceType,
-      forSale,
-      location,
-      propertyType,
-      features,
-      details,
-      parking,
-      lot,
-      construction,
-      virtualSchema,
-    } = req.body;
-    const files = req.files || [];
-
-    if (files.length > 30) {
-      return res.status(400).json({ message: "Maximum 30 images allowed" });
-    }
-
-    const imageUrls = await Promise.all(
-      files.map(async (file) => {
-        const safeUsername = req.user.username.replace(/[^a-zA-Z0-9-_]/g, "_");
-        const folderName = `Betahouse/${safeUsername}/properties`;
-        const result = await cloudinary.uploader.upload(file.path, {
-          folder: folderName,
-        });
-        return result.secure_url;
-      })
+    const property = await createPropertyService(
+      req.body,
+      req.user,
+      req.files || [],
+      req.app.get("io"),
+      req.app.get("onlineUsers")
     );
 
-    const slug =
-      slugify(title, { lower: true, strict: true }) +
-      "-" +
-      Math.round(Math.random() * 10000);
-    const thumbnail = imageUrls[0] || "";
-
-    const property = new Property({
-      title,
-      slug, // ✅ new slug field
-      description,
-      price,
-      priceType,
-      forSale,
-      location,
-      propertyType,
-      features,
-      details,
-      parking,
-      lot,
-      construction,
-      virtualSchema,
-      images: imageUrls,
-      thumbnail,
-      createdBy: req.user._id,
+    res.status(201).json({
+      message: "Property created, pending approval",
+      property,
     });
-
-    await property.save();
-
-    // Invalidate cache
-    const keys = await redisClient.keys("properties:*");
-    if (keys.length > 0) {
-      await redisClient.del(keys);
-    }
-
-    const io = req.app.get("io");
-    const onlineUsers = req.app.get("onlineUsers");
-    const admins = await User.find({ role: "admin" });
-    for (const admin of admins) {
-      await createNotification(
-        io,
-        onlineUsers,
-        admin._id,
-        "property",
-        `New property "${title}" submitted by ${req.user.profile.name} (@${req.user.username}) for approval.`,
-        property._id,
-        "New Property Submission",
-        "Property"
-      );
-    }
-
-    res
-      .status(201)
-      .json({ message: "Property created, pending approval", property });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(400).json({ message: error.message });
   }
 };
 
