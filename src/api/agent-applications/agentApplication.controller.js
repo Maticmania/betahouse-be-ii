@@ -92,10 +92,9 @@ export const saveMyApplication = async (req, res) => {
  */
 export const submitMyApplication = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const user = req.user;
 
-    const submittedApplication = await AgentApplicationService.submitApplicationByUserId(userId);
-
+    const submittedApplication = await AgentApplicationService.submitApplicationByUserId(user);
     res.status(200).json({ message: 'Application submitted successfully', data: submittedApplication });
   } catch (error) {
     if (error.message.includes('not found')) {
