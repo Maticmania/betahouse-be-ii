@@ -13,7 +13,7 @@ import passport from './src/config/passport.config.js';
 import authRoutes from './src/api/auth/auth.routes.js';
 import notificationRoutes from './src/api/notifications/notification.routes.js';
 import propertyRoutes from './src/api/properties/property.routes.js';
-import agentRoutes from './src/api/agents/agent.routes.js';
+import agentApplicationRoutes from './src/api/agent-applications/agentApplication.routes.js';
 import userRoutes from './src/api/users/user.routes.js';
 import uploadRoutes from './src/routes/upload.routes.js';
 
@@ -96,7 +96,7 @@ app.get('/', (req, res) => {
 app.use('/api/v2/auth', authRoutes);
 app.use('/api/v2/properties', propertyRoutes);
 app.use('/api/v2/notifications', notificationRoutes);
-app.use('/api/v2/agent', agentRoutes);
+app.use('/api/v2/agent-applications', agentApplicationRoutes);
 app.use('/api/v2/users', userRoutes);
 app.use('/api/v2/upload', uploadRoutes);
 

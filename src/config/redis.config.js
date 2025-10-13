@@ -1,31 +1,46 @@
-// src/config/redis.js
 import Redis from 'ioredis';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-let attempts = 0;
-const maxAttempts = 3;
+let redisClient;
 
-const redisClient = new Redis(process.env.REDIS_URL, {
-  retryStrategy(times) {
-    attempts++;
-    if (attempts > maxAttempts) {
-      console.error('❌ Redis connection failed after 3 attempts.');
-      return null; // Stop retrying
-    }
-    console.warn(`⚠️ Redis retrying... attempt ${attempts}`);
-    return 1000 * attempts; // Delay between retries (e.g., 1s, 2s, 3s)
-  },
-});
+if (process.env.NODE_ENV === 'test') {
+  // Mock Redis client for testing environment
+  console.log('✅ Mock Redis client initialized for test environment');
+  redisClient = {
+    on: () => {},
+    quit: () => Promise.resolve(),
+    flushall: () => Promise.resolve(),
+    get: () => Promise.resolve(null),
+    set: () => Promise.resolve(),
+    // Add other methods as needed by your tests
+  };
+} else {
+  // Real Redis client for development/production
+  let attempts = 0;
+  const maxAttempts = 3;
 
-redisClient.on('connect', () => {
-  console.log('✅ Redis connected');
-  attempts = 0; // Reset on successful connect
-});
+  redisClient = new Redis(process.env.REDIS_URL, {
+    retryStrategy(times) {
+      attempts++;
+      if (attempts > maxAttempts) {
+        console.error('❌ Redis connection failed after 3 attempts.');
+        return null; // Stop retrying
+      }
+      console.warn(`⚠️ Redis retrying... attempt ${attempts}`);
+      return 1000 * attempts; // Delay between retries (e.g., 1s, 2s, 3s)
+    },
+  });
 
-redisClient.on('error', (err) => {
-  console.error('❌ Redis error:', err.message);
-});
+  redisClient.on('connect', () => {
+    console.log('✅ Redis connected');
+    attempts = 0; // Reset on successful connect
+  });
+
+  redisClient.on('error', (err) => {
+    console.error('❌ Redis error:', err.message);
+  });
+}
 
 export default redisClient;
