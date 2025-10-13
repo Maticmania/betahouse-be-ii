@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Application Submitted</title>
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 600px;
+            margin: 20px auto;
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            text-align: center;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #eeeeee;
+        }
+        .header h1 {
+            color: #0056b3;
+            font-size: 24px;
+            margin: 0;
+        }
+        .content {
+            padding: 20px 0;
+        }
+        .content p {
+            margin-bottom: 10px;
+        }
+        .footer {
+            text-align: center;
+            padding-top: 20px;
+            border-top: 1px solid #eeeeee;
+            color: #777;
+            font-size: 12px;
+        }
+        .button {
+            display: inline-block;
+            background-color: #007bff;
+            color: #ffffff;
+            padding: 10px 20px;
+            border-radius: 5px;
+            text-decoration: none;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Agent Application Submitted!</h1>
+        </div>
+        <div class="content">
+            <p>Dear {{firstName}},</p>
+            <p>Thank you for submitting your agent application to Betahouse. We have received your application and it is now under review.</p>
+            <p>Your application ID is: <strong>{{applicationId}}</strong></p>
+            <p>We will notify you once there is an update on the status of your application.</p>
+            <p>In the meantime, you can view the status of your application by logging into your account.</p>
+            <p>If you have any questions, please do not hesitate to contact us.</p>
+            <a href="{{dashboardLink}}" class="button">View My Application Status</a>
+        </div>
+        <div class="footer">
+            <p>&copy; {{year}} Betahouse. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>

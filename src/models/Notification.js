@@ -36,7 +36,7 @@ const NotificationSchema = new mongoose.Schema(
     },
     relatedModel: {
       type: String,
-      enum: ["Property", "Message", "System", "AgentKYC", "User"],
+      enum: ["Property", "Message", "System", "AgentKYC", "User", "AgentApplication"],
       default: null,
     },
     read: {

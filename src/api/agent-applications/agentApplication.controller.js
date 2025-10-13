@@ -93,8 +93,10 @@ export const saveMyApplication = async (req, res) => {
 export const submitMyApplication = async (req, res) => {
   try {
     const user = req.user;
+    const io = req.app.get('io');
+    const onlineUsers = req.app.get('onlineUsers');
 
-    const submittedApplication = await AgentApplicationService.submitApplicationByUserId(user);
+    const submittedApplication = await AgentApplicationService.submitApplicationByUserId(io, onlineUsers, user);
     res.status(200).json({ message: 'Application submitted successfully', data: submittedApplication });
   } catch (error) {
     if (error.message.includes('not found')) {
@@ -115,12 +117,16 @@ export const updateApplicationStatus = async (req, res) => {
     const { id } = req.params;
     const { status, rejectionReason } = req.body;
     const adminId = req.user._id;
+    const io = req.app.get('io');
+    const onlineUsers = req.app.get('onlineUsers');
 
     if (!status) {
       return res.status(400).json({ message: 'A new status is required' });
     }
 
     const updatedApplication = await AgentApplicationService.updateApplicationStatus(
+      io,
+      onlineUsers,
       id,
       status,
       rejectionReason,

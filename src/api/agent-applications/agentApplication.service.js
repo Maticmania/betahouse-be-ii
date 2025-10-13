@@ -1,4 +1,7 @@
 import AgentApplication from "../../models/AgentApplication.js";
+import { sendAgentApplicationConfirmationEmail } from "../../services/email.js";
+import { createNotification } from "../../services/notification.js";
+import User from "../../models/User.js";
 
 /**
  * Create a new agent application
@@ -121,8 +124,8 @@ export const updateApplicationByUserId = async (userId, updateData) => {
  * @param {string} userId - The ID of the user making the request
  * @returns {Promise<AgentApplication>}
  */
-export const submitApplicationByUserId = async (user) => {
-  const { _id: userId, email } = user;
+export const submitApplicationByUserId = async (io, onlineUsers, user) => {
+  const { _id: userId, email, firstName } = user;
 
   const application = await AgentApplication.findOne({ user: userId });
 
@@ -142,6 +145,28 @@ export const submitApplicationByUserId = async (user) => {
   application.updatedAt = Date.now();
 
   await application.save();
+
+  // Send email confirmation
+  const dashboardLink = `${process.env.FRONTEND_URL}/become-agent/status`; 
+  await sendAgentApplicationConfirmationEmail(
+    email,
+    firstName,
+    application._id.toString(),
+    dashboardLink
+  );
+
+  // Create in-app notification for the user
+  await createNotification(
+    io,
+    onlineUsers,
+    userId,
+    "system",
+    "Your agent application has been successfully submitted and is now under review. Application ID: " + application._id.toString(),
+    application._id,
+    "Agent Application Submitted",
+    "AgentApplication"
+  );
+
   return application;
 };
 
@@ -154,6 +179,8 @@ export const submitApplicationByUserId = async (user) => {
  * @returns {Promise<AgentApplication>}
  */
 export const updateApplicationStatus = async (
+  io,
+  onlineUsers,
   applicationId,
   status,
   rejectionReason,
@@ -196,6 +223,27 @@ export const updateApplicationStatus = async (
   }
 
   await application.save();
+
+  // Create in-app notification for the user whose application status was updated
+  let notificationContent = `Your agent application status has been updated to: ${status.replace(
+    /_/g,
+    " "
+  )}.`;
+  let notificationTitle = "Application Status Update";
+  if (status === "rejected" && rejectionReason) {
+    notificationContent += ` Reason: ${rejectionReason}`;
+  }
+
+  await createNotification(
+    io,
+    onlineUsers,
+    application.user._id,
+    "system",
+    notificationContent + ". Application ID: " + application._id.toString(),
+    notificationTitle,
+    "AgentApplication"
+  );
+
   return application;
 };
 

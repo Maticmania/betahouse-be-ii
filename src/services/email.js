@@ -113,3 +113,34 @@ export const sendPasswordResetEmail = async (user, token) => {
     html,
   });
 };
+
+// Send agent application confirmation email
+export const sendAgentApplicationConfirmationEmail = async (
+  to,
+  firstName,
+  applicationId,
+  dashboardLink
+) => {
+  const templatePath = path.join(
+    __dirname,
+    "../templates/agent-application-confirmation.hbs"
+  );
+  const source = await readFile(templatePath, "utf-8");
+  const template = handlebars.compile(source);
+  const html = template({
+    firstName,
+    applicationId,
+    dashboardLink,
+    year: new Date().getFullYear(),
+  });
+
+  return transporter.sendMail({
+    from: `"${process.env.EMAIL_FROM_NAME || "BetaHouse"}" <${
+      process.env.EMAIL_USER
+    }>`,
+    to,
+    subject: "Agent Application Submitted - Confirmation",
+    html,
+  });
+};
+
