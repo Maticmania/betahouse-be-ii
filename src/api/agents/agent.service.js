@@ -1,133 +1,126 @@
-import AgentKYC from '../../models/AgentKYC.js';
-import User from '../../models/User.js';
-import {cloudinary} from '../../config/cloudinary.config.js';
-import { createNotification } from '../../services/notification.js';
+import AgentApplication from "../../models/AgentApplication.js";
+import User from "../../models/User.js";
+import { createNotification } from "../notifications/notification.service.js";
 
-const submitKYC = async (user, kycData, files, io, onlineUsers) => {
-  if (user.role !== 'user') {
-    throw new Error('Only users can submit KYC to become agents');
+
+const saveApplication = async (user, applicationData, status = "draft") => {
+  if (user.role !== "user") {
+    throw new Error("Only regular users can apply to become agents");
   }
 
-  const existingKYC = await AgentKYC.findOne({ user: user._id });
-  if (existingKYC) {
-    throw new Error('KYC already submitted');
+  let application = await AgentApplication.findOne({ user: user._id });
+
+  if (!application) {
+    application = new AgentApplication({ user: user._id });
   }
 
-  const { fullName, phone, address, idType, idNumber, verificationCode} = kycData;
-  const { idImage, selfieWithCode } = files || {};
+  // Merge basic data
+  application.personal = applicationData.personal || application.personal;
+  application.professional = applicationData.professional || application.professional;
+  application.business = applicationData.business || application.business;
 
-  if (!idImage || !selfieWithCode) {
-    throw new Error('ID image and selfie with code are required');
+  // Just store the Cloudinary file references from frontend
+  if (applicationData.documents) {
+    application.documents = {
+      ...application.documents,
+      ...applicationData.documents,
+    };
   }
 
-  const idImageResult = await cloudinary.uploader.upload(idImage[0].path, {
-    folder: 'real-estate/kyc/id',
-  });
-
-  const selfieResult = await cloudinary.uploader.upload(selfieWithCode[0].path, {
-    folder: 'real-estate/kyc/selfie',
-  });
-
-  const kyc = new AgentKYC({
-    user: user._id,
-    fullName,
-    phone,
-    address,
-    idType,
-    idNumber,
-    idImage: idImageResult.secure_url,
-    selfieWithCode: selfieResult.secure_url,
-    verificationCode,
-  });
-
-  await kyc.save();
-
-  const admins = await User.find({ role: 'admin' });
-  for (const admin of admins) {
-    await createNotification(
-      io,
-      onlineUsers,
-      admin._id,
-      'kyc_submitted',
-      `New KYC submission by ${fullName} awaits review.`,
-      kyc._id,
-      'New KYC Submission',
-      'AgentKYC'
-    );
+  application.status = status;
+  application.updatedAt = Date.now();
+  if (status === "submitted") {
+    application.submittedAt = Date.now();
   }
 
-  return kyc;
+  await application.save();
+  return application;
 };
 
-const getKYCStatus = async (userId) => {
-  const kyc = await AgentKYC.findOne({ user: userId }).select(
-    '-idImage -selfieWithCode'
-  );
-  if (!kyc) {
-    throw new Error('No KYC submission found');
-  }
-  return kyc;
+
+// Get single application (by user or admin)
+const getApplication = async (applicationId) => {
+  const application = await AgentApplication.findById(applicationId)
+    .populate("user", "email profile.name role")
+    .populate("reviewer", "profile.name");
+  if (!application) throw new Error("Application not found");
+  return application;
 };
 
-const reviewKYC = async (kycId, status, rejectionReason, reviewerId, io, onlineUsers) => {
-  if (!['approved', 'rejected'].includes(status)) {
-    throw new Error('Invalid status');
+// Get applications for logged in user
+const getUserApplications = async (userId) => {
+  return await AgentApplication.find({ user: userId }).sort({ createdAt: -1 });
+};
+
+// Admin review
+const reviewApplication = async (applicationId, status, reviewerId, rejectionReason, io, onlineUsers) => {
+  if (!["approved", "rejected", "under_review"].includes(status)) {
+    throw new Error("Invalid status");
   }
 
-  const kyc = await AgentKYC.findById(kycId);
-  if (!kyc) {
-    throw new Error('KYC not found');
+  const application = await AgentApplication.findById(applicationId);
+  if (!application) throw new Error("Application not found");
+
+  application.status = status;
+  application.reviewedAt = Date.now();
+  application.reviewer = reviewerId;
+
+  if (status === "rejected") {
+    application.rejectionReason = rejectionReason || "No reason provided";
   }
 
-  kyc.status = status;
-  kyc.reviewedAt = Date.now();
-  kyc.reviewer = reviewerId;
-  if (status === 'rejected') {
-    kyc.rejectionReason = rejectionReason || 'No reason provided';
+  if (status === "approved") {
+    const user = await User.findById(application.user);
+    if (user.role !== "agent") {
+      user.role = "agent";
+      await user.save();
+    }
   }
 
-  if (status === 'approved') {
-    const user = await User.findById(kyc.user);
-    user.role = 'agent';
-    await user.save();
-  }
-
-  await kyc.save();
+  await application.save();
 
   await createNotification(
     io,
     onlineUsers,
-    kyc.user,
-    `kyc_${status}`,
-    `Your KYC submission has been ${status}. ${status === 'rejected' ? `Reason: ${kyc.rejectionReason}` : ''}`,
-    kyc._id,
-    'KYC Status Update',
-    'AgentKYC'
+    application.user,
+    `application_${status}`,
+    `Your agent application has been ${status}. ${
+      status === "rejected" ? `Reason: ${application.rejectionReason}` : ""
+    }`,
+    application._id,
+    "Agent Application Status",
+    "AgentApplication"
   );
 
-  return kyc;
+  return application;
 };
 
-const listKYCs = async (page, limit, status) => {
+// Admin list applications with pagination
+const listApplications = async (page, limit, status) => {
   const query = status ? { status } : {};
 
-  const kycs = await AgentKYC.find(query)
-    .populate('user', 'email profile.name')
-    .populate('reviewer', 'profile.name')
+  const applications = await AgentApplication.find(query)
+    .populate("user", "email profile.name")
+    .populate("reviewer", "profile.name")
     .sort({ submittedAt: -1 })
     .skip((page - 1) * limit)
     .limit(Number(limit))
-    .select('-idImage -selfieWithCode -voice')
     .lean();
 
-  const total = await AgentKYC.countDocuments(query);
+  const total = await AgentApplication.countDocuments(query);
 
   return {
-    kycs,
+    applications,
     total,
     page: Number(page),
     pages: Math.ceil(total / limit),
   };
 };
 
-export { submitKYC, getKYCStatus, reviewKYC, listKYCs };
+export {
+  saveApplication,
+  getApplication,
+  getUserApplications,
+  reviewApplication,
+  listApplications,
+};

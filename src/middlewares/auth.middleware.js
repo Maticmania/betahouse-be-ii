@@ -12,7 +12,7 @@ const authenticate = async (req, res, next) => {
     if (!user) return res.status(404).json({ message: "User not found" });
 
     req.user = user;
-    req.sessionId = decoded.sessionId; // ✅ store sessionId
+    req.sessionId = decoded.sessionId;
 
     if (req.sessionId) {
       await Session.findByIdAndUpdate(req.sessionId, { lastActive: new Date() });

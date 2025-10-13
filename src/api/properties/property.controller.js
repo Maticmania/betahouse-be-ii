@@ -3,7 +3,8 @@ import User from "../../models/User.js";
 import { cloudinary } from "../../config/cloudinary.config.js";
 import { createNotification } from "../../services/notification.js";
 import redisClient from "../../config/redis.config.js";
-import { createPropertyService } from "./property.service.js";
+import { createPropertyService, updatePropertyService, deletePropertyService, listPropertiesService, listMyPropertiesService, getPropertyService, toggleWishlistService, getMyWishlistService, updatePropertyStatusService, toggleFeaturedService, searchPropertiesService, getGeneralPropertyStatsService } from "./property.service.js";
+import { calculatePreferenceScore } from "./property.service.js";
 import slugify from "slugify";
 
 // Create a property (Agent only)
@@ -31,81 +32,13 @@ const createProperty = async (req, res) => {
 const updateProperty = async (req, res) => {
   try {
     const { id } = req.params;
-    const property = await Property.findById(id);
-
-    if (!property) {
-      return res.status(404).json({ message: "Property not found" });
-    }
-
-    if (property.createdBy.toString() !== req.user._id.toString()) {
-      return res
-        .status(403)
-        .json({ message: "Not authorized to update this property" });
-    }
-
-    const {
-      title,
-      description,
-      price,
-      priceType,
-      forSale,
-      location,
-      propertyType,
-      features,
-      details,
-      parking,
-      lot,
-      construction,
-      virtualSchema,
-    } = req.body;
-    const files = req.files || [];
-
-    if (property.images.length + files.length > 30) {
-      return res.status(400).json({ message: "Maximum 30 images allowed" });
-    }
-
-    const newImageUrls = files.length
-      ? await Promise.all(
-          files.map(async (file) => {
-            const safeUsername = req.user.username.replace(
-              /[^a-zA-Z0-9-_]/g,
-              "_"
-            );
-            const folderName = `Betahouse/${safeUsername}/properties`;
-
-            const result = await cloudinary.uploader.upload(file.path, {
-              folder: folderName,
-            });
-            return result.secure_url;
-          })
-        )
-      : [];
-
-    property.title = title || property.title;
-    property.description = description || property.description;
-    property.price = price || property.price;
-    property.priceType = priceType || property.priceType;
-    property.forSale = forSale !== undefined ? forSale : property.forSale;
-    property.location = location || property.location;
-    property.propertyType = propertyType || property.propertyType;
-    property.features = features || property.features;
-    property.details = details || property.details;
-    property.parking = parking || property.parking;
-    property.lot = lot || property.lot;
-    property.construction = construction || property.construction;
-    property.virtualSchema = virtualSchema
-      ? JSON.parse(virtualSchema)
-      : property.virtualSchema;
-    property.images = [...property.images, ...newImageUrls];
-    property.thumbnail = property.thumbnail || newImageUrls[0] || "";
-
-    await property.save();
-
-    // Invalidate cache
-    const keys = await redisClient.keys("properties:*");
-    if (keys.length > 0) {
-      await redisClient.del(keys);
-    }
+    const property = await updatePropertyService(
+      id,
+      req.user._id,
+      req.user.role,
+      req.body,
+      req.files || []
+    );
 
     res.status(200).json({ message: "Property updated", property });
   } catch (error) {
@@ -118,40 +51,7 @@ const updateProperty = async (req, res) => {
 const deleteProperty = async (req, res) => {
   try {
     const { id } = req.params;
-    const property = await Property.findById(id);
-
-    if (!property) {
-      return res.status(404).json({ message: "Property not found" });
-    }
-
-    if (
-      property.createdBy.toString() !== req.user._id.toString() &&
-      req.user.role !== "admin"
-    ) {
-      return res
-        .status(403)
-        .json({ message: "Not authorized to delete this property" });
-    }
-
-    // Delete images from Cloudinary
-    for (const imageUrl of [...property.images, property.thumbnail]) {
-      if (imageUrl) {
-        const safeUsername = req.user.username.replace(/[^a-zA-Z0-9-_]/g, "_");
-        const folderName = `Betahouse/${safeUsername}/properties`;
-        const publicId = imageUrl.split("/").pop().split(".")[0];
-        await cloudinary.uploader.destroy(
-          `Betahouse/${safeUsername}/properties/${publicId}`
-        );
-      }
-    }
-
-    await property.deleteOne();
-
-    // Invalidate cache
-    const keys = await redisClient.keys("properties:*");
-    if (keys.length > 0) {
-      await redisClient.del(keys);
-    }
+    await deletePropertyService(id, req.user._id, req.user.role);
 
     res.status(200).json({ message: "Property deleted" });
   } catch (error) {
@@ -160,157 +60,10 @@ const deleteProperty = async (req, res) => {
 };
 
 // List properties with better performance
-// List properties with better performance
 const listProperties = async (req, res) => {
   try {
-    const {
-      page = 1,
-      limit = 30,
-      search,
-      state,
-      lga,
-      location,
-      propertyType,
-      forSale,
-      bedrooms,
-      bathrooms,
-      minPrice,
-      maxPrice,
-      minArea,
-      maxArea,
-      yearBuiltMin,
-      yearBuiltMax,
-      hasParking,
-      hasFireplace,
-      isFeatured,
-      features,
-      sortBy = "score",
-      sortOrder = "asc", // ✅ fixed naming
-    } = req.query;
-
-    const cacheKey = `properties:${JSON.stringify(req.query)}`;
-    const cachedData = await redisClient.get(cacheKey);
-    if (cachedData) return res.status(200).json(JSON.parse(cachedData));
-
-    const query = { status: "available" };
-    const orConditions = [];
-
-    // --- Filters ---
-    if (propertyType && propertyType !== "all") query.propertyType = propertyType;
-    if (state) query["address.state"] = state;
-    if (lga) query.lga = lga;
-    if (forSale !== undefined) query.forSale = forSale === "true";
-
-    if (bedrooms) query["details.bedrooms"] = { $gte: Number(bedrooms) };
-    if (bathrooms) query["details.bathrooms"] = { $gte: Number(bathrooms) };
-
-    if (minPrice || maxPrice) {
-      query.price = {};
-      if (minPrice) query.price.$gte = Number(minPrice);
-      if (maxPrice) query.price.$lte = Number(maxPrice);
-    }
-
-    if (minArea || maxArea) {
-      query["details.area.totalStructure"] = {};
-      if (minArea) query["details.area.totalStructure"].$gte = Number(minArea);
-      if (maxArea) query["details.area.totalStructure"].$lte = Number(maxArea);
-    }
-
-    if (yearBuiltMin || yearBuiltMax) {
-      query["construction.yearBuilt"] = {};
-      if (yearBuiltMin) query["construction.yearBuilt"].$gte = Number(yearBuiltMin);
-      if (yearBuiltMax) query["construction.yearBuilt"].$lte = Number(yearBuiltMax);
-    }
-
-    if (hasParking !== undefined) {
-      query["parking.totalSpaces"] = hasParking === "true" ? { $gt: 0 } : 0;
-    }
-
-    if (hasFireplace !== undefined) query["details.fireplace"] = hasFireplace === "true";
-    if (isFeatured !== undefined) query.isFeatured = isFeatured === "true";
-
-    if (features) {
-      const featuresArray = Array.isArray(features)
-        ? features
-        : features.split(",").map(f => f.trim());
-      if (featuresArray.length > 0) {
-        query.features = { $all: featuresArray };
-      }
-    }
-
-    // --- Text Search ---
-    if (search) {
-      orConditions.push(
-        { title: { $regex: search, $options: "i" } },
-        { description: { $regex: search, $options: "i" } }
-      );
-    }
-
-    // --- Location Search ---
-    if (location) {
-      const regex = new RegExp(location, "i");
-      orConditions.push(
-        { "address.state": regex },
-        { "address.city": regex },
-        { "address.street": regex },
-        { "address.area": regex }, // ✅ ensure area is checked
-        { lga: regex },
-        { town: regex }
-      );
-    }
-
-    if (orConditions.length > 0) {
-      query.$or = orConditions;
-    }
-
-    // --- Sorting ---
-    const sortDir = sortOrder === "asc" ? 1 : -1;
-    let properties;
-    let total;
-
-    const user = req.user ? await User.findById(req.user._id).lean() : null;
-
-    if (sortBy === "score" && user) {
-      // Load a reasonable cap for scoring
-      let all = await Property.find(query)
-        .populate("createdBy", "profile.name")
-        .limit(200)
-        .lean();
-
-      // Compute user-preference score
-      all = all.map((p) => ({
-        ...p,
-        score: calculatePreferenceScore(p, user),
-      }));
-
-      // Manual sort
-      all.sort((a, b) => sortDir * (b.score - a.score));
-
-      // Paginate
-      properties = all.slice((page - 1) * limit, (page - 1) * limit + Number(limit));
-      total = all.length;
-    } else {
-      // MongoDB handles sorting/pagination
-      properties = await Property.find(query)
-        .populate("createdBy", "profile.name")
-        .sort({ [sortBy]: sortDir })
-        .skip((page - 1) * limit)
-        .limit(Number(limit))
-        .lean();
-
-      total = await Property.countDocuments(query);
-    }
-
-    const response = {
-      properties,
-      total,
-      page: Number(page),
-      pages: Math.ceil(total / limit),
-    };
-
-    await redisClient.set(cacheKey, JSON.stringify(response), "EX", 600); // cache for 10 mins
+    const response = await listPropertiesService(req.query, req.user);
     return res.status(200).json(response);
-
   } catch (error) {
     console.error("listProperties error:", error);
     return res.status(500).json({ message: "Server error", error: error.message });
@@ -320,31 +73,8 @@ const listProperties = async (req, res) => {
 // List properties for agent/admin
 const listMyProperties = async (req, res) => {
   try {
-    const { page = 1, limit = 10, status } = req.query;
-
-    const query = {};
-    if (req.user.role === "agent") {
-      query.createdBy = req.user._id; // Agents see only their properties
-    }
-    if (status) {
-      query.status = status; // Filter by status (pending, available, sold, rented)
-    }
-
-    const properties = await Property.find(query)
-      .populate("createdBy", "profile.name username")
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(Number(limit))
-      .lean();
-
-    const total = await Property.countDocuments(query);
-
-    res.status(200).json({
-      properties,
-      total,
-      page: Number(page),
-      pages: Math.ceil(total / limit),
-    });
+    const response = await listMyPropertiesService(req.user._id, req.user.role, req.query);
+    res.status(200).json(response);
   } catch (error) {
     res.status(500).json({ message: "Server error", error: error.message });
   }
@@ -354,44 +84,13 @@ const listMyProperties = async (req, res) => {
 const getProperty = async (req, res) => {
   try {
     const { id } = req.params;
-    const property = await Property.findById(id).populate(
-      "createdBy",
-      "profile"
-    );
+    const ip = req.headers["x-forwarded-for"] || req.connection.remoteAddress;
+    const property = await getPropertyService(id, req.user, ip);
 
-    // Block normal users from seeing pending properties
-    if (
-      !property ||
-      (property.status === "pending" &&
-        req.user?.role !== "admin" &&
-        property.createdBy._id.toString() !== req.user?._id.toString())
-    ) {
+    if (!property) {
       return res
         .status(404)
         .json({ message: "Property not found or not accessible" });
-    }
-
-    // Get client IP
-    const ip = req.headers["x-forwarded-for"] || req.connection.remoteAddress;
-
-    // Skip view increment for admin and property creator
-    if (
-      req.user?.role !== "admin" &&
-      property.createdBy._id.toString() !== req.user?._id.toString()
-    ) {
-      const redisKey = `property:${id}:views:${ip}`;
-
-      // Check if this IP already viewed this property recently
-      const hasViewed = await redisClient.exists(redisKey);
-
-      if (!hasViewed) {
-        // Increment views and save
-        property.views += 1;
-        await property.save();
-
-        // Mark IP as having viewed this property for 24 hours (86400 seconds)
-        await redisClient.set(redisKey, "1", "EX", 86400);
-      }
     }
 
     res.status(200).json(property);
@@ -404,30 +103,8 @@ const getProperty = async (req, res) => {
 const toggleWishlist = async (req, res) => {
   try {
     const { id } = req.params;
-    const user = await User.findById(req.user._id);
-    const property = await Property.findById(id);
-
-    if (!property || property.status !== "available") {
-      return res
-        .status(404)
-        .json({ message: "Property not found or not available" });
-    }
-
-    const index = user.wishlist.indexOf(id);
-    if (index === -1) {
-      user.wishlist.push(id);
-      property.savedCount += 1;
-    } else {
-      user.wishlist.splice(index, 1);
-      property.savedCount = Math.max(0, property.savedCount - 1);
-    }
-
-    await user.save();
-    await property.save();
-
-    res
-      .status(200)
-      .json({ message: "Wishlist updated", wishlist: user.wishlist });
+    const wishlist = await toggleWishlistService(req.user._id, id);
+    res.status(200).json({ message: "Wishlist updated", wishlist });
   } catch (error) {
     res.status(500).json({ message: "Server error", error: error.message });
   }
@@ -436,15 +113,8 @@ const toggleWishlist = async (req, res) => {
 //get wishlist (User only)
 const getMyWishlist = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).populate({
-      path: "wishlist",
-      match: { status: "available" },
-      populate: { path: "createdBy", select: "profile.name username" },
-    });
-
-    res.status(200).json({
-      wishlist: user.wishlist || [],
-    });
+    const wishlist = await getMyWishlistService(req.user._id);
+    res.status(200).json({ wishlist });
   } catch (error) {
     res.status(500).json({
       message: "Failed to fetch wishlist",
@@ -458,31 +128,11 @@ const updatePropertyStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
-
-    if (!["available", "rejected"].includes(status)) {
-      return res.status(400).json({ message: "Invalid status" });
-    }
-
-    const property = await Property.findById(id);
-    if (!property) {
-      return res.status(404).json({ message: "Property not found" });
-    }
-
-    property.status = status;
-    await property.save();
-
-    const agent = await User.findById(property.createdBy);
-    const io = req.app.get("io");
-    const onlineUsers = req.app.get("onlineUsers");
-    await createNotification(
-      io,
-      onlineUsers,
-      agent._id,
-      "property", // match your schema
-      `Your property "${property.title}" has been ${status}.`,
-      property._id,
-      `Property ${status === "available" ? "Approved" : "Rejected"}`, // title
-      "Property" // relatedModel
+    const property = await updatePropertyStatusService(
+      id,
+      status,
+      req.app.get("io"),
+      req.app.get("onlineUsers")
     );
 
     res.status(200).json({ message: `Property ${status}`, property });
@@ -495,29 +145,10 @@ const updatePropertyStatus = async (req, res) => {
 const toggleFeatured = async (req, res) => {
   try {
     const { id } = req.params;
-    const property = await Property.findById(id);
-
-    if (!property) {
-      return res.status(404).json({ message: "Property not found" });
-    }
-
-    property.isFeatured = !property.isFeatured;
-    await property.save();
-
-    const agent = await User.findById(property.createdBy);
-    const io = req.app.get("io");
-    const onlineUsers = req.app.get("onlineUsers");
-    await createNotification(
-      io,
-      onlineUsers,
-      agent._id,
-      "property", // match schema enum
-      `Your property "${property.title}" has been ${
-        property.isFeatured ? "featured" : "unfeatured"
-      }.`,
-      property._id,
-      property.isFeatured ? "Property Featured" : "Property Unfeatured",
-      "Property"
+    const property = await toggleFeaturedService(
+      id,
+      req.app.get("io"),
+      req.app.get("onlineUsers")
     );
 
     res.status(200).json({
@@ -532,30 +163,7 @@ const toggleFeatured = async (req, res) => {
 // GET /properties/search
 const searchProperties = async (req, res) => {
   try {
-    const { keyword, state, lga, minPrice, maxPrice, propertyType, location } =
-      req.query;
-    const cacheKey = `property:search:${keyword || "_"}:${state || "_"}:${
-      lga || "_"
-    }:${location || "_"}:${minPrice || 0}:${maxPrice || "_"}:${
-      propertyType || "_"
-    }`;
-
-    const cached = await redisClient.get(cacheKey);
-    if (cached) return res.status(200).json(JSON.parse(cached));
-
-    const query = { status: "available" };
-    if (state) query["location.state"] = state;
-    if (lga) query["location.lga"] = lga;
-    if (propertyType) query.propertyType = propertyType;
-    if (minPrice || maxPrice) query.price = {};
-    if (minPrice) query.price.$gte = Number(minPrice);
-    if (maxPrice) query.price.$lte = Number(maxPrice);
-    if (keyword) query.$text = { $search: keyword };
-
-    const properties = await Property.find(query).lean();
-
-    await redisClient.set(cacheKey, JSON.stringify({ properties }), "EX", 600); // 10 minutes
-
+    const properties = await searchPropertiesService(req.query);
     res.status(200).json({ properties });
   } catch (error) {
     console.error("Error searching properties:", error);
@@ -566,21 +174,8 @@ const searchProperties = async (req, res) => {
 // GET /properties/stats/general
 const getGeneralPropertyStats = async (req, res) => {
   try {
-    const stats = await redisClient.get("property:stats:general");
-    if (stats) return res.status(200).json(JSON.parse(stats));
-
-    const total = await Property.countDocuments();
-    const available = await Property.countDocuments({ status: "available" });
-    const sold = await Property.countDocuments({ status: "sold" });
-
-    const result = { total, available, sold };
-    await redisClient.setEx(
-      "property:stats:general",
-      3600,
-      JSON.stringify(result)
-    );
-
-    res.status(200).json(result);
+    const stats = await getGeneralPropertyStatsService();
+    res.status(200).json(stats);
   } catch (err) {
     res
       .status(500)

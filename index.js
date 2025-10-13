@@ -15,6 +15,7 @@ import notificationRoutes from './src/api/notifications/notification.routes.js';
 import propertyRoutes from './src/api/properties/property.routes.js';
 import agentRoutes from './src/api/agents/agent.routes.js';
 import userRoutes from './src/api/users/user.routes.js';
+import uploadRoutes from './src/routes/upload.routes.js';
 
 const app = express();
 const server = http.createServer(app);
@@ -88,7 +89,7 @@ app.set("onlineUsers", onlineUsers);
 
 // ✅ Base route
 app.get('/', (req, res) => {
-  res.send('Real Estate API running...');
+  res.send('Betahouse Real Estate API running...');
 });
 
 // ✅ API Routes
@@ -97,8 +98,13 @@ app.use('/api/v2/properties', propertyRoutes);
 app.use('/api/v2/notifications', notificationRoutes);
 app.use('/api/v2/agent', agentRoutes);
 app.use('/api/v2/users', userRoutes);
+app.use('/api/v2/upload', uploadRoutes);
 
-// ✅ Start server with HTTP + Socket.IO
+// ✅ 404 handler
+app.use((req, res) => {
+  res.status(404).json({ message: 'Route not found' });
+});
+
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });

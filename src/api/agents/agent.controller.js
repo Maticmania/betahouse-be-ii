@@ -1,42 +1,98 @@
-import * as agentService from './agent.service.js';
+import * as agentService from "./agent.service.js";
 
-const submitKYC = async (req, res) => {
+// Save draft application
+const saveApplication = async (req, res) => {
   try {
-    const kyc = await agentService.submitKYC(req.user, req.body, req.files, req.app.get('io'), req.app.get('onlineUsers'));
-    res.status(201).json({ message: 'KYC submitted, pending approval', kyc });
+    if (!req.user) {
+      return res.status(401).json({ message: "Please log in to continue" });
+    }
+    const application = await agentService.saveApplication(
+      req.user,
+      req.body,
+      "draft"
+    );
+    res
+      .status(201)
+      .json({ message: "Application saved as draft", application });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.log(error);
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 
-const getKYCStatus = async (req, res) => {
+// Submit final application
+const submitApplication = async (req, res) => {
   try {
-    const kyc = await agentService.getKYCStatus(req.user._id);
-    res.status(200).json(kyc);
+    const application = await agentService.saveApplication(
+      req.user,
+      req.body,
+      "submitted"
+    );
+    res
+      .status(201)
+      .json({ message: "Application submitted, pending review", application });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.log(error);
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 
-const reviewKYC = async (req, res) => {
+// Get single application (for admin or user if allowed)
+const getApplication = async (req, res) => {
   try {
-    const { kycId } = req.params;
+    const { applicationId } = req.params;
+    const application = await agentService.getApplication(applicationId);
+    res.status(200).json(application);
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+// Get applications for logged-in user
+const getUserApplications = async (req, res) => {
+  try {
+    const applications = await agentService.getUserApplications(req.user._id);
+    res.status(200).json(applications);
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+// Admin: review application
+const reviewApplication = async (req, res) => {
+  try {
+    const { applicationId } = req.params;
     const { status, rejectionReason } = req.body;
-    const kyc = await agentService.reviewKYC(kycId, status, rejectionReason, req.user._id, req.app.get('io'), req.app.get('onlineUsers'));
-    res.status(200).json({ message: `KYC ${status}`, kyc });
+    const application = await agentService.reviewApplication(
+      applicationId,
+      status,
+      req.user._id,
+      rejectionReason,
+      req.app.get("io"),
+      req.app.get("onlineUsers")
+    );
+    res.status(200).json({ message: `Application ${status}`, application });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 
-const listKYCs = async (req, res) => {
+// Admin: list applications
+const listApplications = async (req, res) => {
   try {
     const { page = 1, limit = 10, status } = req.query;
-    const result = await agentService.listKYCs(page, limit, status);
+    const result = await agentService.listApplications(page, limit, status);
     res.status(200).json(result);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 
-export { submitKYC, getKYCStatus, reviewKYC, listKYCs };
+export {
+  saveApplication,
+  submitApplication,
+  getApplication,
+  getUserApplications,
+  reviewApplication,
+  listApplications,
+};

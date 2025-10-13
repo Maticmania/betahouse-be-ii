@@ -1,35 +1,37 @@
-// src/routes/agent.js
 import express from "express";
-import { submitKYC, getKYCStatus, reviewKYC, listKYCs } from "./agent.controller.js";
+import * as agentController from "./agent.controller.js";
 import { authenticate, restrictTo } from "../../middlewares/auth.middleware.js";
-import multer from "multer";
 
 const router = express.Router();
 
-// Configure Multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "uploads/");
-  },
-  filename: (req, file, cb) => {
-    cb(null, `${Date.now()}-${file.originalname}`);
-  },
-});
-const upload = multer({ storage });
-
-// Routes
+// Save application
 router.post(
-  "/kyc",
+  "/applications/save",
   authenticate,
-  restrictTo("user"),
-  upload.fields([
-    { name: "idImage", maxCount: 1 },
-    { name: "selfieWithCode", maxCount: 1 },
-  ]),
-  submitKYC
+  agentController.saveApplication
 );
-router.get("/kyc/status", authenticate, getKYCStatus);
-router.put("/kyc/:kycId/review", authenticate, restrictTo("admin"), reviewKYC);
-router.get("/kyc/list", authenticate, restrictTo("admin"), listKYCs);
+
+// Submit final application
+router.post(
+  "/applications/submit",
+  authenticate,
+  agentController.submitApplication
+);
+
+// Get single application
+router.get("/applications/:applicationId", authenticate, agentController.getApplication);
+
+// Get applications for logged-in user
+router.get("/applications", authenticate, agentController.getUserApplications);
+
+// Admin: review application
+router.put(
+  "/applications/review/:applicationId",
+  restrictTo("admin"),
+  agentController.reviewApplication
+);
+
+// Admin: list applications
+router.get("/admins/applications", restrictTo("admin"), agentController.listApplications);
 
 export default router;

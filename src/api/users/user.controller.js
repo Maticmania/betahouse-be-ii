@@ -2,7 +2,7 @@
 import User from "../../models/User.js";
 import { createNotification } from "../../services/notification.js";
 import redisClient from "../../config/redis.config.js";
-import AgentKYC from "../../models/AgentKYC.js";
+// import AgentKYC from "../../models/AgentKYC.js";
 import { cloudinary } from "../../config/cloudinary.config.js";
 import { comparePassword } from "../../utils/auth.js";
 import { sendVerificationEmail } from "../../services/email.js";
@@ -253,7 +253,7 @@ const deleteUser = async (req, res) => {
     }
 
     // Delete associated KYC
-    await AgentKYC.deleteOne({ user: id });
+    // await AgentKYC.deleteOne({ user: id });
 
     // Delete user
     await user.deleteOne();

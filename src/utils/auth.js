@@ -27,16 +27,13 @@ const blacklistToken = async (token) => {
   try {
     const decoded = jwt.decode(token);
     if (!decoded || !decoded.exp) {
-      console.warn("⚠️ Could not decode token or missing exp claim");
       return;
     }
 
     const expiresIn = decoded.exp - Math.floor(Date.now() / 1000);
-    console.log("Token expires in:", expiresIn, "seconds");
 
     if (expiresIn > 0) {
       await redisClient.set(`blacklist:${token}`, "blacklisted", "EX", expiresIn);
-      console.log("✅ Token blacklisted in Redis");
     }
   } catch (error) {
     console.error("Failed to blacklist token:", error);
