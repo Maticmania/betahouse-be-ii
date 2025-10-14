@@ -1,4 +1,3 @@
-// src/routes/property.js
 import express from "express";
 import { createProperty, updateProperty, deleteProperty, listProperties, getProperty, getPropertyBySlug, toggleWishlist, updatePropertyStatus, toggleFeatured, listMyProperties, searchProperties,              // 🔍 Filter properties by keyword
   getGeneralPropertyStats,       // 📊 Get global stats: total, available, sold

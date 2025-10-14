@@ -14,8 +14,7 @@
     "testEnvironment": "node",
     "transform": {
       "^.+\\.js$": "babel-jest"
-    },
-    "extensionsToTreatAsEsm": [".js"]
+    }
   },
   "keywords": [
     "betahouse"

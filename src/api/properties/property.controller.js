@@ -95,6 +95,7 @@ const getProperty = async (req, res) => {
 
     res.status(200).json(property);
   } catch (error) {
+    console.error("getProperty error:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
