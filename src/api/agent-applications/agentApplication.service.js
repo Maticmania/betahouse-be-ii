@@ -1,26 +1,25 @@
+import { createAgent } from "../agents/agent.service.js";
 import AgentApplication from "../../models/AgentApplication.js";
-import { sendAgentApplicationConfirmationEmail } from "../../services/email.js";
+import { sendAgentApplicationConfirmationEmail, sendAgentApplicationApprovedEmail, sendAgentApplicationRejectedEmail } from "../../services/email.js";
 import { createNotification } from "../../services/notification.js";
 import User from "../../models/User.js";
 
-/**
- * Create a new agent application
- * @param {object} applicationData - The data for the application
- * @param {string} userId - The ID of the user creating the application
- * @returns {Promise<AgentApplication>}
- */
+
+const generateApplicationId = () => {
+  return `BH-AGENT-${new Date().getFullYear()}-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+};
+
 export const createApplication = async (applicationData, userId) => {
-  // 1. Check if user already has an application
   const existingApplication = await AgentApplication.findOne({ user: userId });
   if (existingApplication) {
     throw new Error("An application for this user already exists.");
   }
 
-  // 2. Explicitly map fields to prevent mass assignment
   const { personal, professional, business, documents } = applicationData;
 
   const application = new AgentApplication({
     user: userId,
+    applicationId: generateApplicationId(),
     status: "draft",
     personal,
     professional,
@@ -28,28 +27,18 @@ export const createApplication = async (applicationData, userId) => {
     documents,
   });
 
-  // 3. Save and return the new application
   await application.save();
   return application;
 };
 
-/**
- * Get an application by its ID
- * @param {string} applicationId - The ID of the application
- * @returns {Promise<AgentApplication>}
- */
-export const getApplicationById = async (applicationId) => {
-  return AgentApplication.findById(applicationId).populate(
+
+export const getApplicationByApplicationId = async (applicationId) => {
+  return AgentApplication.findOne({ applicationId }).populate(
     "user",
     "firstName lastName email"
   );
 };
 
-/**
- * Get an application by the user's ID
- * @param {string} userId - The ID of the user
- * @returns {Promise<AgentApplication>}
- */
 export const getApplicationByUserId = async (userId) => {
   return AgentApplication.findOne({ user: userId }).populate(
     "user",
@@ -57,11 +46,6 @@ export const getApplicationByUserId = async (userId) => {
   );
 };
 
-/**
- * Get all applications based on a query
- * @param {object} query - The query object for filtering
- * @returns {Promise<AgentApplication[]>}
- */
 export const getApplications = async (query) => {
   // Build a filter object from the query
   const filter = {};
@@ -75,13 +59,7 @@ export const getApplications = async (query) => {
     .sort({ createdAt: -1 });
 };
 
-/**
- * Update an application
- * @param {string} applicationId - The ID of the application
- * @param {object} updateData - The data to update
- * @param {string} userId - The ID of the user making the request
- * @returns {Promise<AgentApplication>}
- */
+
 export const updateApplicationByUserId = async (userId, updateData) => {
   const application = await AgentApplication.findOne({ user: userId });
 
@@ -118,12 +96,6 @@ export const updateApplicationByUserId = async (userId, updateData) => {
   return application;
 };
 
-/**
- * Submit an application
- * @param {string} applicationId - The ID of the application
- * @param {string} userId - The ID of the user making the request
- * @returns {Promise<AgentApplication>}
- */
 export const submitApplicationByUserId = async (io, onlineUsers, user) => {
   const { _id: userId, email, firstName } = user;
 
@@ -151,7 +123,7 @@ export const submitApplicationByUserId = async (io, onlineUsers, user) => {
   await sendAgentApplicationConfirmationEmail(
     email,
     firstName,
-    application._id.toString(),
+    application.applicationId,
     dashboardLink
   );
 
@@ -161,7 +133,7 @@ export const submitApplicationByUserId = async (io, onlineUsers, user) => {
     onlineUsers,
     userId,
     "system",
-    "Your agent application has been successfully submitted and is now under review. Application ID: " + application._id.toString(),
+    "Your agent application has been successfully submitted and is now under review. Application ID: " + application.applicationId,
     application._id,
     "Agent Application Submitted",
     "AgentApplication"
@@ -170,14 +142,11 @@ export const submitApplicationByUserId = async (io, onlineUsers, user) => {
   return application;
 };
 
-/**
- * Update an application's status (Admin)
- * @param {string} applicationId - The ID of the application
- * @param {string} status - The new status
- * @param {string} [rejectionReason] - The reason for rejection (if applicable)
- * @param {string} adminId - The ID of the admin performing the action
- * @returns {Promise<AgentApplication>}
- */
+
+const generateAgentId = () => {
+  return `BH-AGENT-${new Date().getFullYear()}-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+};
+
 export const updateApplicationStatus = async (
   io,
   onlineUsers,
@@ -186,45 +155,70 @@ export const updateApplicationStatus = async (
   rejectionReason,
   adminId
 ) => {
-  const application = await getApplicationById(applicationId);
+  const application = await getApplicationByApplicationId(applicationId);
 
   if (!application) {
     throw new Error("Application not found");
   }
 
-  // Ensure the application has been submitted before an admin can review it
   if (!["submitted", "under_review"].includes(application.status)) {
     throw new Error("Application must be submitted before it can be reviewed.");
   }
 
-  // Validate the new status
   const allowedStatusUpdates = ["under_review", "approved", "rejected"];
   if (!allowedStatusUpdates.includes(status)) {
     throw new Error(
-      `Invalid status update. Must be one of: ${allowedStatusUpdates.join(
-        ", "
-      )}`
+      `Invalid status update. Must be one of: ${allowedStatusUpdates.join(", ")}`
     );
   }
 
-  // Require a rejection reason if rejecting
   if (status === "rejected" && !rejectionReason) {
     throw new Error("A reason for rejection is required.");
   }
 
   application.status = status;
+
+  if (status === "approved") {
+    await User.findByIdAndUpdate(application.user, { role: "agent" });
+
+    const agentData = {
+      user: application.user,
+      agentId: generateAgentId(),
+      personal: application.personal,
+      professional: application.professional,
+      business: application.business,
+      documents: application.documents,
+    };
+    await createAgent(agentData);
+  }
   application.reviewer = adminId;
   application.reviewedAt = Date.now();
   application.updatedAt = Date.now();
   if (status === "rejected") {
     application.rejectionReason = rejectionReason;
   } else {
-    application.rejectionReason = undefined; // Clear reason if not rejected
+    application.rejectionReason = undefined;
   }
 
   await application.save();
 
-  // Create in-app notification for the user whose application status was updated
+  const user = await User.findById(application.user);
+
+  if (status === "approved") {
+    await sendAgentApplicationApprovedEmail(
+      user.email,
+      user.profile.name || user.firstName,
+      application.applicationId
+    );
+  } else if (status === "rejected") {
+    await sendAgentApplicationRejectedEmail(
+      user.email,
+      user.profile.name || user.firstName,
+      application.applicationId,
+      rejectionReason
+    );
+  }
+
   let notificationContent = `Your agent application status has been updated to: ${status.replace(
     /_/g,
     " "
@@ -234,28 +228,24 @@ export const updateApplicationStatus = async (
     notificationContent += ` Reason: ${rejectionReason}`;
   }
 
-  await createNotification(
-    io,
-    onlineUsers,
-    application.user._id,
-    "system",
-    notificationContent + ". Application ID: " + application._id.toString(),
-    notificationTitle,
-    "AgentApplication"
-  );
+await createNotification(
+  io,
+  onlineUsers,
+  application.user._id,
+  "system",
+  notificationContent + `. Application ID: ${application.applicationId}`,
+  application._id,
+  notificationTitle,
+  "AgentApplication"
+);
 
-  return application;
+
+  return application.status;
 };
 
-/**
- * Delete an application
- * @param {string} applicationId - The ID of the application
- * @param {string} userId - The ID of the user making the request
- * @param {string} userRole - The role of the user making the request
- * @returns {Promise<void>}
- */
+
 export const deleteApplication = async (applicationId, userId, userRole) => {
-  const application = await getApplicationById(applicationId);
+  const application = await getApplicationByApplicationId(applicationId);
 
   if (!application) {
     throw new Error("Application not found");
@@ -269,5 +259,5 @@ export const deleteApplication = async (applicationId, userId, userRole) => {
     throw new Error("You are not authorized to delete this application");
   }
 
-  await AgentApplication.findByIdAndDelete(applicationId);
+  await AgentApplication.findOneAndDelete({ applicationId });
 };

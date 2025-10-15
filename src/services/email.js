@@ -144,3 +144,61 @@ export const sendAgentApplicationConfirmationEmail = async (
   });
 };
 
+export const sendAgentApplicationApprovedEmail = async (
+  to,
+  name,
+  applicationId
+) => {
+  const templatePath = path.join(
+    __dirname,
+    "../templates/agent-application-approved.hbs"
+  );
+  const source = await readFile(templatePath, "utf-8");
+  const template = handlebars.compile(source);
+  const loginLink = `${process.env.FRONTEND_URL}/login`;
+  const html = template({
+    name,
+    applicationId,
+    loginLink,
+    year: new Date().getFullYear(),
+  });
+
+  return transporter.sendMail({
+    from: `"${process.env.EMAIL_FROM_NAME || "BetaHouse"}" <${
+      process.env.EMAIL_USER
+    }>`,
+    to,
+    subject: "Your Agent Application Has Been Approved!",
+    html,
+  });
+};
+
+export const sendAgentApplicationRejectedEmail = async (
+  to,
+  name,
+  applicationId,
+  rejectionReason
+) => {
+  const templatePath = path.join(
+    __dirname,
+    "../templates/agent-application-rejected.hbs"
+  );
+  const source = await readFile(templatePath, "utf-8");
+  const template = handlebars.compile(source);
+  const html = template({
+    name,
+    applicationId,
+    rejectionReason,
+    year: new Date().getFullYear(),
+  });
+
+  return transporter.sendMail({
+    from: `"${process.env.EMAIL_FROM_NAME || "BetaHouse"}" <${
+      process.env.EMAIL_USER
+    }>`,
+    to,
+    subject: "Update on Your Agent Application",
+    html,
+  });
+};
+

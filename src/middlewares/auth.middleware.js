@@ -1,5 +1,6 @@
 import { verifyToken } from "../utils/auth.js";
 import User from "../models/User.js";
+import Agent from "../models/Agent.js";
 import Session from "../models/Session.js";
 
 const authenticate = async (req, res, next) => {
@@ -10,6 +11,13 @@ const authenticate = async (req, res, next) => {
     const decoded = await verifyToken(token);
     const user = await User.findById(decoded.userId);
     if (!user) return res.status(404).json({ message: "User not found" });
+
+    if (user.role === "agent") {
+      const agent = await Agent.findOne({ user: user._id });
+      if (agent) {
+        req.agent = agent;
+      }
+    }
 
     req.user = user;
     req.sessionId = decoded.sessionId;

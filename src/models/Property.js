@@ -6,6 +6,10 @@ const PropertySchema = new mongoose.Schema({
     required: true,
     trim: true,
   },
+  propertyId: {
+    type: String,
+    unique: true,
+  },
   slug: {
     type: String,
     unique: true,
@@ -75,11 +79,11 @@ const PropertySchema = new mongoose.Schema({
     required: true,
   },
   features: [{ type: String }],
-  images: [{ type: String }], 
-  thumbnail: { type: String },
+  images: [{ url: String, publicId: String }], 
+  thumbnail: { url: String, publicId: String },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
+    ref: "Agent",
     required: true,
   },
   createdAt: {

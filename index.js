@@ -15,6 +15,7 @@ import notificationRoutes from './src/api/notifications/notification.routes.js';
 import propertyRoutes from './src/api/properties/property.routes.js';
 import agentApplicationRoutes from './src/api/agent-applications/agentApplication.routes.js';
 import userRoutes from './src/api/users/user.routes.js';
+import agentRoutes from './src/api/agents/agent.routes.js';
 import uploadRoutes from './src/routes/upload.routes.js';
 
 const app = express();
@@ -98,6 +99,7 @@ app.use('/api/v2/properties', propertyRoutes);
 app.use('/api/v2/notifications', notificationRoutes);
 app.use('/api/v2/agent-applications', agentApplicationRoutes);
 app.use('/api/v2/users', userRoutes);
+app.use('/api/v2/agents', agentRoutes);
 app.use('/api/v2/upload', uploadRoutes);
 
 // ✅ 404 handler

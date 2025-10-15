@@ -1,47 +1,33 @@
 import slugify from "slugify";
 import Property from "../../models/Property.js";
+import Agent from "../../models/Agent.js";
 import User from "../../models/User.js";
 import {cloudinary} from "../../config/cloudinary.config.js";
 import redisClient from "../../config/redis.config.js";
 import { createNotification } from "../../services/notification.js";
 
-export const checkAgentRole = (user) => {
-  if (user.role !== "agent") {
-    throw new Error("Only agents can create properties");
-  }
+const generatePropertyId = () => {
+  return `BH-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
 };
 
-export const uploadImages = async (files, username) => {
-  if (files.length > 30) throw new Error("Maximum 30 images allowed");
+export const createPropertyService = async (
+  data,
+  agent,
+  io,
+  onlineUsers
+) => {
+  const slug = generateSlug(data.title);
 
-  const safeUsername = username.replace(/[^a-zA-Z0-9-_]/g, "_");
-  const folderName = `Betahouse/${safeUsername}/properties`;
+  const property = new Property({
+    ...data,
+    propertyId: generatePropertyId(),
+    slug,
+    createdBy: agent._id,
+  });
 
-  const imageUrls = await Promise.all(
-    files.map((file) =>
-      cloudinary.uploader.upload(file.path, { folder: folderName })
-    )
-  );
+  await property.save();
+  await invalidateCache();
 
-  return imageUrls.map((r) => r.secure_url);
-};
-
-export const generateSlug = (title) => {
-  return (
-    slugify(title, { lower: true, strict: true }) +
-    "-" +
-    Math.round(Math.random() * 10000)
-  );
-};
-
-export const invalidateCache = async () => {
-  const keys = await redisClient.keys("properties:*");
-  if (keys.length > 0) {
-    await redisClient.del(keys);
-  }
-};
-
-export const notifyAdmins = async (io, onlineUsers, property, user) => {
   const admins = await User.find({ role: "admin" });
   for (const admin of admins) {
     await createNotification(
@@ -49,38 +35,12 @@ export const notifyAdmins = async (io, onlineUsers, property, user) => {
       onlineUsers,
       admin._id,
       "property",
-      `New property "${property.title}" submitted by ${user.profile.name} (@${user.username}) for approval.`,
-      property._id,
+      `New property "${property.title}" submitted by ${agent.personal.firstName} for approval.`,
+      property.propertyId,
       "New Property Submission",
       "Property"
     );
   }
-};
-
-export const createPropertyService = async (
-  data,
-  user,
-  files,
-  io,
-  onlineUsers
-) => {
-  checkAgentRole(user);
-
-  const imageUrls = await uploadImages(files, user.username);
-  const slug = generateSlug(data.title);
-  const thumbnail = imageUrls[0] || "";
-
-  const property = new Property({
-    ...data,
-    slug,
-    images: imageUrls,
-    thumbnail,
-    createdBy: user._id,
-  });
-
-  await property.save();
-  await invalidateCache();
-  await notifyAdmins(io, onlineUsers, property, user);
 
   return property;
 };
@@ -91,7 +51,6 @@ export const calculatePreferenceScore = (property, user) => {
 
   if (!preferences) return score;
 
-  // Price range match
   if (preferences.priceRange) {
     if (
       property.price >= preferences.priceRange.min &&
@@ -101,7 +60,6 @@ export const calculatePreferenceScore = (property, user) => {
     }
   }
 
-  // Property type match
   if (
     preferences.propertyType &&
     preferences.propertyType.includes(property.propertyType)
@@ -109,7 +67,6 @@ export const calculatePreferenceScore = (property, user) => {
     score += 20;
   }
 
-  // Feature match
   if (preferences.features) {
     const matchedFeatures = property.features.filter((f) =>
       preferences.features.includes(f)
@@ -117,24 +74,22 @@ export const calculatePreferenceScore = (property, user) => {
     score += matchedFeatures.length * 10;
   }
 
-  // Boost featured properties
   if (property.isFeatured) score += 50;
 
-  // Boost by views and saved count
   score += property.views * 0.1;
   score += property.savedCount * 0.5;
 
   return score;
 };
 
-export const updatePropertyService = async (propertyId, userId, userRole, updateData, files) => {
-  const property = await Property.findById(propertyId);
+export const updatePropertyService = async (propertyId, agentId, userRole, updateData) => {
+  const property = await Property.findOne({ propertyId });
 
   if (!property) {
     throw new Error("Property not found");
   }
 
-  if (property.createdBy.toString() !== userId.toString() && userRole !== "admin") {
+  if (property.createdBy.toString() !== agentId.toString() && userRole !== "admin") {
     throw new Error("Not authorized to update this property");
   }
 
@@ -152,18 +107,9 @@ export const updatePropertyService = async (propertyId, userId, userRole, update
     lot,
     construction,
     virtualSchema,
+    images,
+    thumbnail,
   } = updateData;
-
-  if (files && files.length > 0) {
-    if (property.images.length + files.length > 30) {
-      throw new Error("Maximum 30 images allowed");
-    }
-    const newImageUrls = await uploadImages(files, userId);
-    property.images = [...property.images, ...newImageUrls];
-    if (!property.thumbnail) {
-      property.thumbnail = newImageUrls[0] || "";
-    }
-  }
 
   property.title = title || property.title;
   property.description = description || property.description;
@@ -180,6 +126,8 @@ export const updatePropertyService = async (propertyId, userId, userRole, update
   property.virtualSchema = virtualSchema
     ? JSON.parse(virtualSchema)
     : property.virtualSchema;
+  property.images = images || property.images;
+  property.thumbnail = thumbnail || property.thumbnail;
 
   await property.save();
   await invalidateCache();
@@ -187,24 +135,24 @@ export const updatePropertyService = async (propertyId, userId, userRole, update
   return property;
 };
 
-export const deletePropertyService = async (propertyId, userId, userRole) => {
-  const property = await Property.findById(propertyId);
+export const deletePropertyService = async (propertyId, agentId, userRole) => {
+  const property = await Property.findOne({ propertyId });
 
   if (!property) {
     throw new Error("Property not found");
   }
 
-  if (property.createdBy.toString() !== userId.toString() && userRole !== "admin") {
+  if (property.createdBy.toString() !== agentId.toString() && userRole !== "admin") {
     throw new Error("Not authorized to delete this property");
   }
 
-  // Delete images from Cloudinary
-  for (const imageUrl of [...property.images, property.thumbnail]) {
-    if (imageUrl) {
-      const publicId = imageUrl.split("/").pop().split(".")[0];
-      const safeUsername = property.createdBy.toString().replace(/[^a-zA-Z0-9-_]/g, "_");
+  const agent = await Agent.findById(agentId).populate("user");
+
+  for (const image of [...property.images, property.thumbnail]) {
+    if (image && image.publicId) {
+      const safeUsername = agent.user.username.replace(/[^a-zA-Z0-9-_]/g, "_");
       await cloudinary.uploader.destroy(
-        `Betahouse/${safeUsername}/properties/${publicId}`
+        `Betahouse/${safeUsername}/properties/${image.publicId}`
       );
     }
   }
@@ -319,7 +267,7 @@ export const listPropertiesService = async (query, user) => {
 
   if (sortBy === "score" && userDoc) {
     let all = await Property.find(queryFilter)
-      .populate("createdBy", "profile.name")
+      .populate({ path: "createdBy", populate: { path: "user", select: "profile.name" } })
       .limit(200)
       .lean();
 
@@ -334,7 +282,7 @@ export const listPropertiesService = async (query, user) => {
     total = all.length;
   } else {
     properties = await Property.find(queryFilter)
-      .populate("createdBy", "profile.name")
+      .populate({ path: "createdBy", populate: { path: "user", select: "profile.name" } })
       .sort({ [sortBy]: sortDir })
       .skip((page - 1) * limit)
       .limit(Number(limit))
@@ -355,19 +303,19 @@ export const listPropertiesService = async (query, user) => {
   return response;
 };
 
-export const listMyPropertiesService = async (userId, role, query) => {
+export const listMyPropertiesService = async (agentId, role, query) => {
   const { page = 1, limit = 10, status } = query;
 
   const queryFilter = {};
   if (role === "agent") {
-    queryFilter.createdBy = userId;
+    queryFilter.createdBy = agentId;
   }
   if (status) {
     queryFilter.status = status;
   }
 
   const properties = await Property.find(queryFilter)
-    .populate("createdBy", "profile.name username")
+    .populate({ path: "createdBy", populate: { path: "user", select: "profile.name username" } })
     .sort({ createdAt: -1 })
     .skip((page - 1) * limit)
     .limit(Number(limit))
@@ -384,10 +332,10 @@ export const listMyPropertiesService = async (userId, role, query) => {
 };
 
 export const getPropertyService = async (propertyId, user, ip) => {
-  const property = await Property.findById(propertyId).populate(
-    "createdBy",
-    "profile"
-  );
+  const property = await Property.findOne({ propertyId }).populate({
+    path: "createdBy",
+    populate: { path: "user", select: "profile" },
+  });
 
   if (
     !property ||
@@ -417,7 +365,7 @@ export const getPropertyService = async (propertyId, user, ip) => {
 
 export const toggleWishlistService = async (userId, propertyId) => {
   const user = await User.findById(userId);
-  const property = await Property.findById(propertyId);
+  const property = await Property.findOne({ propertyId });
 
   if (!property || property.status !== "available") {
     throw new Error("Property not found or not available");
@@ -442,7 +390,7 @@ export const getMyWishlistService = async (userId) => {
   const user = await User.findById(userId).populate({
     path: "wishlist",
     match: { status: "available" },
-    populate: { path: "createdBy", select: "profile.name username" },
+    populate: { path: "createdBy", populate: { path: "user", select: "profile.name username" } },
   });
 
   return user.wishlist || [];
@@ -453,7 +401,7 @@ export const updatePropertyStatusService = async (propertyId, status, io, online
     throw new Error("Invalid status");
   }
 
-  const property = await Property.findById(propertyId);
+  const property = await Property.findOne({ propertyId });
   if (!property) {
     throw new Error("Property not found");
   }
@@ -461,11 +409,11 @@ export const updatePropertyStatusService = async (propertyId, status, io, online
   property.status = status;
   await property.save();
 
-  const agent = await User.findById(property.createdBy);
+  const agent = await Agent.findById(property.createdBy);
   await createNotification(
     io,
     onlineUsers,
-    agent._id,
+    agent.user,
     "property",
     `Your property "${property.title}" has been ${status}.`,
     property._id,
@@ -477,7 +425,7 @@ export const updatePropertyStatusService = async (propertyId, status, io, online
 };
 
 export const toggleFeaturedService = async (propertyId, io, onlineUsers) => {
-  const property = await Property.findById(propertyId);
+  const property = await Property.findOne({ propertyId });
 
   if (!property) {
     throw new Error("Property not found");
@@ -486,11 +434,11 @@ export const toggleFeaturedService = async (propertyId, io, onlineUsers) => {
   property.isFeatured = !property.isFeatured;
   await property.save();
 
-  const agent = await User.findById(property.createdBy);
+  const agent = await Agent.findById(property.createdBy);
   await createNotification(
     io,
     onlineUsers,
-    agent._id,
+    agent.user,
     "property",
     `Your property "${property.title}" has been ${
       property.isFeatured ? "featured" : "unfeatured"
@@ -570,11 +518,11 @@ export const getAgentPropertyStatsService = async (agentId) => {
 };
 
 export const deletePropertyImageService = async (propertyId, imageId) => {
-  const property = await Property.findById(propertyId);
+  const property = await Property.findOne({ propertyId });
   if (!property) throw new Error("Property not found");
 
-  property.images = property.images.filter((img) => !img.includes(imageId));
-  if (property.thumbnail.includes(imageId)) property.thumbnail = "";
+  property.images = property.images.filter((img) => img.publicId !== imageId);
+  if (property.thumbnail && property.thumbnail.publicId === imageId) property.thumbnail = {};
 
   await property.save();
   await redisClient.del(`property:${propertyId}`);

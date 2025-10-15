@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Agent Application Rejected</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 0; }
+        .container { width: 100%; max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); }
+        .header { text-align: center; padding-bottom: 20px; border-bottom: 1px solid #eeeeee; }
+        .header h1 { color: #dc3545; }
+        .content { padding: 20px 0; }
+        .content p { font-size: 16px; line-height: 1.5; color: #555555; }
+        .footer { text-align: center; padding-top: 20px; border-top: 1px solid #eeeeee; color: #aaaaaa; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Agent Application Update</h1>
+        </div>
+        <div class="content">
+            <p>Dear {{name}},</p>
+            <p>We regret to inform you that your agent application (ID: <strong>{{applicationId}}</strong>) has been <strong>rejected</strong>.</p>
+            <p><strong>Reason for rejection:</strong></p>
+            <p>{{rejectionReason}}</p>
+            <p>We understand this may be disappointing. We encourage you to review the reason provided and consider reapplying in the future if you address the concerns.</p>
+            <p>Thank you for your interest in Betahouse.</p>
+        </div>
+        <div class="footer">
+            <p>&copy; {{year}} Betahouse. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>

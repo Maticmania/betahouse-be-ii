@@ -20,10 +20,10 @@ export const createApplication = async (req, res) => {
 /**
  * Controller to get an application by its ID
  */
-export const getApplicationById = async (req, res) => {
+export const getApplicationByApplicationId = async (req, res) => {
   try {
-    const { id } = req.params;
-    const application = await AgentApplicationService.getApplicationById(id);
+    const { applicationId } = req.params;
+    const application = await AgentApplicationService.getApplicationByApplicationId(applicationId);
 
     if (!application) {
       return res.status(404).json({ message: 'Application not found' });
@@ -114,7 +114,7 @@ export const submitMyApplication = async (req, res) => {
  */
 export const updateApplicationStatus = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { applicationId } = req.params;
     const { status, rejectionReason } = req.body;
     const adminId = req.user._id;
     const io = req.app.get('io');
@@ -127,13 +127,13 @@ export const updateApplicationStatus = async (req, res) => {
     const updatedApplication = await AgentApplicationService.updateApplicationStatus(
       io,
       onlineUsers,
-      id,
+      applicationId,
       status,
       rejectionReason,
       adminId
     );
 
-    res.status(200).json({ message: `Application status updated to ${status}` , data: updatedApplication });
+    res.status(200).json({ message: `Application status updated to ${status}` , status: updatedApplication });
   } catch (error) {
     if (error.message === 'Application not found') {
       return res.status(404).json({ message: error.message });

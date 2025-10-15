@@ -65,15 +65,15 @@ export const createNotification = async (
       }
     }
 
-    // email fallback
-    const user = await User.findById(userId).lean();
-    if (user?.email) {
-      await sendNotificationEmail(
-        user.email,
-        title || type.replace(/_/g, " ").toUpperCase(),
-        content
-      );
-    }
+    // // email fallback
+    // const user = await User.findById(userId).lean();
+    // if (user?.email) {
+    //   await sendNotificationEmail(
+    //     user.email,
+    //     title || type.replace(/_/g, " ").toUpperCase(),
+    //     content
+    //   );
+    // }
 
     return notification;
   } catch (error) {

@@ -1,12 +1,14 @@
+
 import mongoose from "mongoose";
 
-const AgentApplicationSchema = new mongoose.Schema({
+const AgentSchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
     required: true,
+    unique: true,
   },
-  applicationId: {
+  agentId: {
     type: String,
     unique: true,
   },
@@ -45,27 +47,8 @@ const AgentApplicationSchema = new mongoose.Schema({
     certificationDocuments: [{ url: String, publicId: String }],
     businessRegistration: [{ url: String, publicId: String }],
   },
-  status: {
-    type: String,
-    enum: ["draft", "submitted", "under_review", "approved", "rejected"],
-    default: "draft",
-  },
-  submittedAt: {
-    type: Date,
-    default: Date.now,
-  },
-  reviewedAt: {
-    type: Date,
-  },
-  reviewer: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User", // Admin who reviewed the KYC
-  },
-  rejectionReason: {
-    type: String, // Reason for rejection, if applicable
-  },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
 });
 
-export default mongoose.model("AgentApplication", AgentApplicationSchema);
+export default mongoose.model("Agent", AgentSchema);
