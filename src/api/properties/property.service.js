@@ -4,6 +4,7 @@ import Agent from "../../models/Agent.js";
 import User from "../../models/User.js";
 import redisClient from "../../config/redis.config.js";
 import { createNotification } from "../../services/notification.js";
+import { setCache } from "../../utils/cache.js";
 
 const generatePropertyId = () => {
   return `BH-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
@@ -65,6 +66,23 @@ export const calculatePreferenceScore = (property, user) => {
   return score;
 };
 
+export const saveAsDraftService = async (data, agent) => {
+  const propertyId = generatePropertyId();
+  const slug = generateSlug(data.title, propertyId);
+
+  const property = new Property({
+    ...data,
+    propertyId,
+    slug,
+    agent: agent._id,
+    status: "draft",
+  });
+
+  await property.save();
+
+  return property;
+};
+
 export const createPropertyService = async (data, agent, io, onlineUsers) => {
   const propertyId = generatePropertyId();
   const slug = generateSlug(data.title, propertyId);
@@ -81,7 +99,6 @@ export const createPropertyService = async (data, agent, io, onlineUsers) => {
   });
 
   await property.save();
-  await invalidateCache();
 
   const admins = await User.find({ role: "admin" });
   for (const admin of admins) {
@@ -100,60 +117,89 @@ export const createPropertyService = async (data, agent, io, onlineUsers) => {
   return property;
 };
 
-
-
-export const updatePropertyService = async (propertyId, agentId, userRole, updateData) => {
+export const publishPropertyService = async (
+  propertyId,
+  agentId,
+  io,
+  onlineUsers
+) => {
   const property = await Property.findOne({ propertyId });
 
   if (!property) {
     throw new Error("Property not found");
   }
 
-  if (property.createdBy.toString() !== agentId.toString() && userRole !== "admin") {
+  if (property.agent.toString() !== agentId.toString()) {
+    throw new Error("Not authorized to publish this property");
+  }
+
+  if (property.status !== "draft") {
+    throw new Error("Property is not a draft");
+  }
+
+  property.status = "pending";
+  await property.save();
+
+  // Notify admins
+  const admins = await User.find({ role: "admin" });
+  for (const admin of admins) {
+    await createNotification(
+      io,
+      onlineUsers,
+      admin._id,
+      "property",
+      `Property "${property.title}" has been published and is pending approval.`,
+      property.propertyId,
+      "Property Published",
+      "Property"
+    );
+  }
+
+  return property;
+};
+
+export const updatePropertyService = async (
+  propertyId,
+  agentId,
+  userRole,
+  updateData
+) => {
+  const property = await Property.findOne({ propertyId });
+
+  if (!property) {
+    throw new Error("Property not found");
+  }
+
+  if (
+    property.agent.toString() !== agentId.toString() &&
+    userRole !== "admin"
+  ) {
     throw new Error("Not authorized to update this property");
   }
 
-  const {
-    title,
-    description,
-    price,
-    currency,
-    rentFrequency,
-    legalDocuments,
-    priceType,
-    forSale,
-    location,
-    propertyType,
-    features,
-    details,
-    parking,
-    lot,
-    construction,
-    virtualSchema,
-    images,
-    thumbnail,
-  } = updateData;
+  if (!updateData || typeof updateData !== "object") {
+    throw new Error("Invalid update data");
+  }
 
-  property.title = title || property.title;
-  property.description = description || property.description;
-  property.price = price || property.price;
-  property.currency = currency || property.currency;
-  property.rentFrequency = rentFrequency || property.rentFrequency;
-  property.legalDocuments = legalDocuments || property.legalDocuments;
-  property.priceType = priceType || property.priceType;
-  property.forSale = forSale !== undefined ? forSale : property.forSale;
-  property.location = location || property.location;
-  property.propertyType = propertyType || property.propertyType;
-  property.features = features || property.features;
-  property.details = details || property.details;
-  property.parking = parking || property.parking;
-  property.lot = lot || property.lot;
-  property.construction = construction || property.construction;
-  property.virtualSchema = virtualSchema
-    ? JSON.parse(virtualSchema)
-    : property.virtualSchema;
-  property.images = images || property.images;
-  property.thumbnail = thumbnail || property.thumbnail;
+  const forbiddenFields = [
+    "propertyId",
+    "slug",
+    "agent",
+    "views",
+    "savedCount",
+    "isFeatured",
+    "status",
+  ];
+
+  Object.keys(updateData).forEach((key) => {
+    if (!forbiddenFields.includes(key)) {
+      property[key] = updateData[key];
+    }
+  });
+
+  if (updateData.title) {
+    property.slug = generateSlug(updateData.title, property.propertyId);
+  }
 
   await property.save();
   await invalidateCache();
@@ -168,7 +214,10 @@ export const deletePropertyService = async (propertyId, agentId, userRole) => {
     throw new Error("Property not found");
   }
 
-  if (property.createdBy.toString() !== agentId.toString() && userRole !== "admin") {
+  if (
+    property.agent.toString() !== agentId.toString() &&
+    userRole !== "admin"
+  ) {
     throw new Error("Not authorized to delete this property");
   }
 
@@ -176,15 +225,22 @@ export const deletePropertyService = async (propertyId, agentId, userRole) => {
 
   for (const image of [...property.images, property.thumbnail]) {
     if (image && image.publicId) {
-      const safeUsername = agent.user.username.replace(/[^a-zA-Z0-9-_]/g, "_");
       await cloudinary.uploader.destroy(
-        `Betahouse/${safeUsername}/properties/${image.publicId}`
+        `Betahouse/${agent.user}/${image.publicId}`
       );
     }
   }
 
   await property.deleteOne();
   await invalidateCache();
+};
+
+export const getMyDraftsService = async (agentId) => {
+  const properties = await Property.find({
+    agent: agentId,
+    status: "draft",
+  }).sort({ createdAt: -1 });
+  return properties;
 };
 
 export const listPropertiesService = async (query, user) => {
@@ -215,12 +271,11 @@ export const listPropertiesService = async (query, user) => {
 
   const cacheKey = `properties:${JSON.stringify(query)}`;
   const cachedData = await redisClient.get(cacheKey);
-  if (cachedData) return JSON.parse(cachedData);
-
-  const queryFilter = { status: "available" };
+  const queryFilter = { status: { $in: ["available", "rented", "sold"] } };
   const orConditions = [];
 
-  if (propertyType && propertyType !== "all") queryFilter.propertyType = propertyType;
+  if (propertyType && propertyType !== "all")
+    queryFilter.propertyType = propertyType;
   if (state) queryFilter["address.state"] = state;
   if (lga) queryFilter.lga = lga;
   if (forSale !== undefined) queryFilter.forSale = forSale === "true";
@@ -236,27 +291,32 @@ export const listPropertiesService = async (query, user) => {
 
   if (minArea || maxArea) {
     queryFilter["details.area.totalStructure"] = {};
-    if (minArea) queryFilter["details.area.totalStructure"].$gte = Number(minArea);
-    if (maxArea) queryFilter["details.area.totalStructure"].$lte = Number(maxArea);
+    if (minArea)
+      queryFilter["details.area.totalStructure"].$gte = Number(minArea);
+    if (maxArea)
+      queryFilter["details.area.totalStructure"].$lte = Number(maxArea);
   }
 
   if (yearBuiltMin || yearBuiltMax) {
     queryFilter["construction.yearBuilt"] = {};
-    if (yearBuiltMin) queryFilter["construction.yearBuilt"].$gte = Number(yearBuiltMin);
-    if (yearBuiltMax) queryFilter["construction.yearBuilt"].$lte = Number(yearBuiltMax);
+    if (yearBuiltMin)
+      queryFilter["construction.yearBuilt"].$gte = Number(yearBuiltMin);
+    if (yearBuiltMax)
+      queryFilter["construction.yearBuilt"].$lte = Number(yearBuiltMax);
   }
 
   if (hasParking !== undefined) {
     queryFilter["parking.totalSpaces"] = hasParking === "true" ? { $gt: 0 } : 0;
   }
 
-  if (hasFireplace !== undefined) queryFilter["details.fireplace"] = hasFireplace === "true";
+  if (hasFireplace !== undefined)
+    queryFilter["details.fireplace"] = hasFireplace === "true";
   if (isFeatured !== undefined) queryFilter.isFeatured = isFeatured === "true";
 
   if (features) {
     const featuresArray = Array.isArray(features)
       ? features
-      : features.split(",").map(f => f.trim());
+      : features.split(",").map((f) => f.trim());
     if (featuresArray.length > 0) {
       queryFilter.features = { $all: featuresArray };
     }
@@ -282,7 +342,7 @@ export const listPropertiesService = async (query, user) => {
   }
 
   if (orConditions.length > 0) {
-    queryFilter.$or = orConditions; 
+    queryFilter.$or = orConditions;
   }
 
   const sortDir = sortOrder === "asc" ? 1 : -1;
@@ -293,7 +353,10 @@ export const listPropertiesService = async (query, user) => {
 
   if (sortBy === "score" && userDoc) {
     let all = await Property.find(queryFilter)
-      .populate({ path: "createdBy", populate: { path: "user", select: "profile.name" } })
+      .populate({
+        path: "createdBy",
+        populate: { path: "user", select: "profile.name" },
+      })
       .limit(200)
       .lean();
 
@@ -304,11 +367,17 @@ export const listPropertiesService = async (query, user) => {
 
     all.sort((a, b) => sortDir * (b.score - a.score));
 
-    properties = all.slice((page - 1) * limit, (page - 1) * limit + Number(limit));
+    properties = all.slice(
+      (page - 1) * limit,
+      (page - 1) * limit + Number(limit)
+    );
     total = all.length;
   } else {
     properties = await Property.find(queryFilter)
-      .populate({ path: "createdBy", populate: { path: "user", select: "profile.name" } })
+      .populate({
+        path: "createdBy",
+        populate: { path: "user", select: "profile.name" },
+      })
       .sort({ [sortBy]: sortDir })
       .skip((page - 1) * limit)
       .limit(Number(limit))
@@ -334,14 +403,13 @@ export const listMyPropertiesService = async (agentId, role, query) => {
 
   const queryFilter = {};
   if (role === "agent") {
-    queryFilter.createdBy = agentId;
+    queryFilter.agent = agentId;
   }
   if (status) {
     queryFilter.status = status;
   }
 
   const properties = await Property.find(queryFilter)
-    .populate({ path: "createdBy", populate: { path: "user", select: "profile.name username" } })
     .sort({ createdAt: -1 })
     .skip((page - 1) * limit)
     .limit(Number(limit))
@@ -357,36 +425,75 @@ export const listMyPropertiesService = async (agentId, role, query) => {
   };
 };
 
-export const getPropertyService = async (propertyId, user, ip) => {
-  const property = await Property.findOne({ propertyId }).populate({
-    path: "createdBy",
-    populate: { path: "user", select: "profile" },
+export const getPropertyBySlugService = async (slug, ip) => {
+  const cacheKey = `property:${slug}:public`;
+  const cached = await redisClient.get(cacheKey);
+  if (cached) return JSON.parse(cached);
+
+  const property = await Property.findOne({ slug }).populate({
+    path: "agent",
+    select: "agentId personal user",
+    populate: { path: "user", select: "_id profile.name" },
   });
 
-  if (
-    !property ||
-    (property.status === "pending" &&
-      user?.role !== "admin" &&
-      property.createdBy._id.toString() !== user?._id.toString())
-  ) {
-    return null;
+  if (!property) return null;
+
+  const isPublic = ["available", "rented", "sold"].includes(property.status);
+  if (!isPublic) return null;
+
+  const viewKey = `property:${property.propertyId}:views:${ip}`;
+  const hasViewed = await redisClient.exists(viewKey);
+
+  if (!hasViewed) {
+    await Property.updateOne(
+      { propertyId: property.propertyId },
+      { $inc: { views: 1 } }
+    );
+    await redisClient.set(viewKey, "1", "EX", 86400);
   }
 
-  if (
-    user?.role !== "admin" &&
-    property.createdBy._id.toString() !== user?._id.toString()
-  ) {
-    const redisKey = `property:${propertyId}:views:${ip}`;
-    const hasViewed = await redisClient.exists(redisKey);
-
-    if (!hasViewed) {
-      property.views += 1;
-      await property.save();
-      await redisClient.set(redisKey, "1", "EX", 86400);
-    }
-  }
+  // Cache the property
+  await setCache(cacheKey, JSON.stringify(property), 600);
 
   return property;
+};
+
+
+export const getPropertyService = async (propertyId, user, ip) => {
+  const property = await Property.findOne({ propertyId }).populate({
+    path: "agent",
+    select: "agentId personal user",
+    populate: {
+      path: "user",
+      select: "_id profile.name",
+    },
+  });
+
+  if (!property) return null;
+
+  const isAdmin = user?.role === "admin";
+  const isOwner =
+    user && property.agent?.user?._id?.toString() === user._id?.toString();
+  const isPublic = ["available", "rented", "sold"].includes(property.status);
+
+  //  Allow access if admin, owner, or public
+  if (isAdmin || isOwner || isPublic) {
+    // Increment views only for public visitors
+    if (isPublic) {
+      const redisKey = `property:${propertyId}:views:${ip}`;
+      const hasViewed = await redisClient.exists(redisKey);
+
+      if (!hasViewed) {
+        await Property.updateOne({ propertyId }, { $inc: { views: 1 } });
+        await redisClient.set(redisKey, "1", "EX", 86400); // cache 24h
+      }
+    }
+
+    return property;
+  }
+
+  // Otherwise, restrict access
+  return null;
 };
 
 export const toggleWishlistService = async (userId, propertyId) => {
@@ -416,13 +523,21 @@ export const getMyWishlistService = async (userId) => {
   const user = await User.findById(userId).populate({
     path: "wishlist",
     match: { status: "available" },
-    populate: { path: "createdBy", populate: { path: "user", select: "profile.name username" } },
+    populate: {
+      path: "createdBy",
+      populate: { path: "user", select: "profile.name username" },
+    },
   });
 
   return user.wishlist || [];
 };
 
-export const updatePropertyStatusService = async (propertyId, status, io, onlineUsers) => {
+export const updatePropertyStatusService = async (
+  propertyId,
+  status,
+  io,
+  onlineUsers
+) => {
   if (!["available", "rejected"].includes(status)) {
     throw new Error("Invalid status");
   }
@@ -478,8 +593,17 @@ export const toggleFeaturedService = async (propertyId, io, onlineUsers) => {
 };
 
 export const searchPropertiesService = async (query) => {
-  const { keyword, state, lga, minPrice, maxPrice, propertyType, location, rentFrequency, legalDocuments } =
-    query;
+  const {
+    keyword,
+    state,
+    lga,
+    minPrice,
+    maxPrice,
+    propertyType,
+    location,
+    rentFrequency,
+    legalDocuments,
+  } = query;
   const cacheKey = `property:search:${keyword || "_"}:${state || "_"}:${
     lga || "_"
   }:${location || "_"}:${minPrice || 0}:${maxPrice || "_"}:${
@@ -489,7 +613,7 @@ export const searchPropertiesService = async (query) => {
   const cached = await redisClient.get(cacheKey);
   if (cached) return JSON.parse(cached);
 
-  const queryFilter = { status: "available" };
+  const queryFilter = { status: { $in: ["available", "rented", "sold"] } };
   if (state) queryFilter["location.state"] = state;
   if (lga) queryFilter["location.lga"] = lga;
   if (propertyType) queryFilter.propertyType = propertyType;
@@ -548,7 +672,8 @@ export const deletePropertyImageService = async (propertyId, imageId) => {
   if (!property) throw new Error("Property not found");
 
   property.images = property.images.filter((img) => img.publicId !== imageId);
-  if (property.thumbnail && property.thumbnail.publicId === imageId) property.thumbnail = {};
+  if (property.thumbnail && property.thumbnail.publicId === imageId)
+    property.thumbnail = {};
 
   await property.save();
   await redisClient.del(`property:${propertyId}`);

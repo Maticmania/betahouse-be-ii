@@ -1,4 +1,31 @@
-import { createPropertyService, updatePropertyService, deletePropertyService, listPropertiesService, listMyPropertiesService, getPropertyService, toggleWishlistService, getMyWishlistService, updatePropertyStatusService, toggleFeaturedService, searchPropertiesService, getGeneralPropertyStatsService } from "./property.service.js";
+import {
+  createPropertyService,
+  updatePropertyService,
+  deletePropertyService,
+  listPropertiesService,
+  listMyPropertiesService,
+  getPropertyService,
+  toggleWishlistService,
+  getMyWishlistService,
+  updatePropertyStatusService,
+  toggleFeaturedService,
+  searchPropertiesService,
+  getGeneralPropertyStatsService,
+  saveAsDraftService,
+  publishPropertyService,
+  getMyDraftsService,
+  getPropertyBySlugService,
+} from "./property.service.js";
+
+const saveAsDraft = async (req, res) => {
+  try {
+    const property = await saveAsDraftService(req.body, req.agent);
+    res.status(201).json({ message: "Property saved as draft", property });
+  } catch (error) {
+    console.error(error);
+    res.status(400).json({ message: error.message });
+  }
+};
 
 const createProperty = async (req, res) => {
   try {
@@ -16,6 +43,23 @@ const createProperty = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(400).json({ message: error.message });
+  }
+};
+
+const publishProperty = async (req, res) => {
+  try {
+    const { propertyId } = req.params;
+    const property = await publishPropertyService(
+      propertyId,
+      req.agent._id,
+      req.app.get("io"),
+      req.app.get("onlineUsers")
+    );
+    res
+      .status(200)
+      .json({ message: "Property published successfully", property });
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 
@@ -53,15 +97,47 @@ const listProperties = async (req, res) => {
     return res.status(200).json(response);
   } catch (error) {
     console.error("listProperties error:", error);
-    return res.status(500).json({ message: "Server error", error: error.message });
+    return res
+      .status(500)
+      .json({ message: "Server error", error: error.message });
+  }
+};
+
+const getMyDrafts = async (req, res) => {
+  try {
+    const drafts = await getMyDraftsService(req.agent._id);
+    res.status(200).json({ drafts });
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 
 const listMyProperties = async (req, res) => {
   try {
-    const response = await listMyPropertiesService(req.agent._id, req.user.role, req.query);
+    const response = await listMyPropertiesService(
+      req.agent._id,
+      req.user.role,
+      req.query
+    );
     res.status(200).json(response);
   } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+const getPropertyBySlug = async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const ip = req.headers["x-forwarded-for"] || req.connection.remoteAddress;
+    const property = await getPropertyBySlugService(slug, ip);
+
+    if (!property) {
+      return res.status(404).json({ message: "Property not found" });
+    }
+
+    res.status(200).json(property);
+  } catch (error) {
+    console.error("getPropertyBySlug error:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
@@ -165,9 +241,13 @@ const getGeneralPropertyStats = async (req, res) => {
 
 export {
   createProperty,
+  saveAsDraft,
+  publishProperty,
+  getMyDrafts,
   updateProperty,
   deleteProperty,
   listProperties,
+  getPropertyBySlug,
   getProperty,
   toggleWishlist,
   getMyWishlist,

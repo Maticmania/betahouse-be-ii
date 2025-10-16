@@ -1,5 +1,9 @@
+import redisClient from "../config/redis.config.js";
+
+/** Helper: set cache with optional TTL (default 1 hour) */
+
 export const setCache = async (key, value, ttl = 3600) => {
-  const stringValue = JSON.stringify(value);
+  const stringValue = value;
   if (typeof redisClient.setEx === "function") {
     await redisClient.setEx(key, ttl, stringValue);
   } else {
