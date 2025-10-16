@@ -2,7 +2,6 @@ import express from "express";
 import { createProperty, updateProperty, deleteProperty, listProperties, getProperty, toggleWishlist, updatePropertyStatus, toggleFeatured, listMyProperties, searchProperties, getGeneralPropertyStats, getMyWishlist } from "./property.controller.js";
 
 import { authenticate, restrictTo, optionalAuthenticate } from "../../middlewares/auth.middleware.js";
-import { upload } from "../../middlewares/upload.middleware.js";
 
 const router = express.Router();
 

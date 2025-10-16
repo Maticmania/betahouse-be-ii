@@ -29,14 +29,18 @@ const NotificationSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    relatedId: {
-      type: mongoose.Schema.Types.ObjectId,
-      refPath: "relatedModel",
-      default: null,
-    },
+    relatedId: { type: String, required: true },
+    
     relatedModel: {
       type: String,
-      enum: ["Property", "Message", "System", "AgentKYC", "User", "AgentApplication"],
+      enum: [
+        "Property",
+        "Message",
+        "System",
+        "AgentKYC",
+        "User",
+        "AgentApplication",
+      ],
       default: null,
     },
     read: {

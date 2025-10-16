@@ -2,7 +2,6 @@ import slugify from "slugify";
 import Property from "../../models/Property.js";
 import Agent from "../../models/Agent.js";
 import User from "../../models/User.js";
-import {cloudinary} from "../../config/cloudinary.config.js";
 import redisClient from "../../config/redis.config.js";
 import { createNotification } from "../../services/notification.js";
 
@@ -10,39 +9,23 @@ const generatePropertyId = () => {
   return `BH-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
 };
 
-export const createPropertyService = async (
-  data,
-  agent,
-  io,
-  onlineUsers
-) => {
-  const slug = generateSlug(data.title);
-
-  const property = new Property({
-    ...data,
-    propertyId: generatePropertyId(),
-    slug,
-    createdBy: agent._id,
-  });
-
-  await property.save();
-  await invalidateCache();
-
-  const admins = await User.find({ role: "admin" });
-  for (const admin of admins) {
-    await createNotification(
-      io,
-      onlineUsers,
-      admin._id,
-      "property",
-      `New property "${property.title}" submitted by ${agent.personal.firstName} for approval.`,
-      property.propertyId,
-      "New Property Submission",
-      "Property"
-    );
+const generateSlug = (title, propertyId) => {
+  if (!title || typeof title !== "string") {
+    throw new Error("Invalid title provided for slug generation");
+  }
+  if (!propertyId) {
+    throw new Error("Property ID missing for slug generation");
   }
 
-  return property;
+  const baseSlug = slugify(title, { lower: true, strict: true });
+  return `${baseSlug}-${propertyId.toLowerCase()}`;
+};
+
+const invalidateCache = async () => {
+  const keys = await redisClient.keys("properties*");
+  if (keys.length > 0) {
+    await redisClient.del(keys);
+  }
 };
 
 export const calculatePreferenceScore = (property, user) => {
@@ -82,6 +65,43 @@ export const calculatePreferenceScore = (property, user) => {
   return score;
 };
 
+export const createPropertyService = async (data, agent, io, onlineUsers) => {
+  const propertyId = generatePropertyId();
+  const slug = generateSlug(data.title, propertyId);
+
+  const property = new Property({
+    ...data,
+    propertyId,
+    slug,
+    agent: agent._id,
+    status: "pending",
+    savedCount: 0,
+    views: 0,
+    isFeatured: false,
+  });
+
+  await property.save();
+  await invalidateCache();
+
+  const admins = await User.find({ role: "admin" });
+  for (const admin of admins) {
+    await createNotification(
+      io,
+      onlineUsers,
+      admin._id,
+      "property",
+      `New property "${property.title}" submitted by ${agent.agentId} for approval.`,
+      property.propertyId,
+      "New Property Submission",
+      "Property"
+    );
+  }
+
+  return property;
+};
+
+
+
 export const updatePropertyService = async (propertyId, agentId, userRole, updateData) => {
   const property = await Property.findOne({ propertyId });
 
@@ -97,6 +117,9 @@ export const updatePropertyService = async (propertyId, agentId, userRole, updat
     title,
     description,
     price,
+    currency,
+    rentFrequency,
+    legalDocuments,
     priceType,
     forSale,
     location,
@@ -114,6 +137,9 @@ export const updatePropertyService = async (propertyId, agentId, userRole, updat
   property.title = title || property.title;
   property.description = description || property.description;
   property.price = price || property.price;
+  property.currency = currency || property.currency;
+  property.rentFrequency = rentFrequency || property.rentFrequency;
+  property.legalDocuments = legalDocuments || property.legalDocuments;
   property.priceType = priceType || property.priceType;
   property.forSale = forSale !== undefined ? forSale : property.forSale;
   property.location = location || property.location;
@@ -452,7 +478,7 @@ export const toggleFeaturedService = async (propertyId, io, onlineUsers) => {
 };
 
 export const searchPropertiesService = async (query) => {
-  const { keyword, state, lga, minPrice, maxPrice, propertyType, location } =
+  const { keyword, state, lga, minPrice, maxPrice, propertyType, location, rentFrequency, legalDocuments } =
     query;
   const cacheKey = `property:search:${keyword || "_"}:${state || "_"}:${
     lga || "_"

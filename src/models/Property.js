@@ -1,136 +1,98 @@
 import mongoose from "mongoose";
 
 const PropertySchema = new mongoose.Schema({
-  title: {
-    type: String,
-    required: true,
-    trim: true,
+  propertyId: { type: String, unique: true, required: true },
+  title: { type: String, required: true, trim: true },
+  slug: { type: String, unique: true },
+  description: { type: String, required: true },
+  category: { 
+    type: String, 
+    enum: ["sale", "rent", "shortlet"], 
+    required: true 
   },
-  propertyId: {
-    type: String,
-    unique: true,
-  },
-  slug: {
-    type: String,
-    unique: true,
-  },
-  description: {
-    type: String,
-    required: true,
-  },
-  details: {
-    bedrooms: { type: Number, default: 0 },
-    bathrooms: { type: Number, default: 0 },
-    area: {
-      totalStructure: { type: Number, default: 0 },
-      totalInterior: { type: Number, default: 0 },
-    },
-    kitchen: {
-      count: { type: Number, default: 1 },
-      features: [{ type: String }],
-    },
-    heating: [
-      {
-        type: { type: String },
-        features: [{ type: String }],
-      },
-    ],
-    appliances: {
-      included: [{ type: String }],
-    },
-    basement: {
-      type: String,
-      default: "none",
-    },
-    fireplace: { type: Boolean, default: false },
-  },
-  status: {
-    type: String,
-    enum: ["available", "sold", "rented", "pending", "draft", "rejected"],
-    default: "pending",
-  },
-  priceType: {
-    type: String,
-    enum: ["yearly", "total"],
-    default: "total",
-  },
-  forSale: {
-    type: Boolean,
-    default: true,
-  },
-  price: {
-    type: Number,
-    required: true,
-  },
-  location: {
-    state: { type: String, required: true },
-    lga: { type: String }, 
-    city: { type: String },
-    country: { type: String, required: true, default: "Nigeria" },
-    address: { type: String },
-    coordinates: {
-      lat: Number,
-      lng: Number,
-    },
-    frontageLength: { type: Number },
-  },
+
   propertyType: {
     type: String,
+    enum: [
+      "apartment",
+      "duplex",
+      "bungalow",
+      "self-contain",
+      "detached house",
+      "semi-detached house",
+      "terrace",
+      "land",
+      "shop",
+      "office",
+      "warehouse",
+      "hotel",
+      "event center",
+      "filling station",
+      "factory",
+      "school",
+      "others",
+    ],
     required: true,
   },
-  features: [{ type: String }],
-  images: [{ url: String, publicId: String }], 
+
+  propertyUse: {
+    type: String,
+    enum: ["residential", "commercial", "mixed-use"],
+    default: "residential",
+  },
+
+  price: { type: Number, required: true },
+  rentFrequency: {
+    type: String,
+    enum: ["monthly", "quarterly", "annually", "none"],
+    default: "none",
+  },
+  serviceCharge: { type: Number },
+  inspectionFee: { type: Number },
+  agentCommission: { type: Number },
+
+  location: {
+    address: { type: String },
+    city: { type: String },
+    lga: { type: String },
+    state: { type: String, required: true },
+    country: { type: String, default: "Nigeria" },
+    coordinates: { lat: Number, lng: Number },
+  },
+
+  landSize: { type: String }, // e.g. "450sqm" or "1 plot"
+  bedrooms: { type: Number, default: 0 },
+  bathrooms: { type: Number, default: 0 },
+  toilets: { type: Number, default: 0 },
+  parkingSpaces: { type: Number, default: 0 },
+  furnished: { type: Boolean, default: false },
+  serviced: { type: Boolean, default: false },
+  newProperty: { type: Boolean, default: false },
+
+  facilities: [{ type: String }], // e.g. ["Security", "Borehole", "24hrs Light", "POP Ceiling"]
+  legalDocuments: [{ type: String }], // e.g. ["C of O", "Governor’s Consent"]
+  images: [{ url: String, publicId: String }],
   thumbnail: { url: String, publicId: String },
-  createdBy: {
+  videoTourUrl: { type: String },
+
+  status: {
+    type: String,
+    enum: ["available", "rented", "sold", "pending", "rejected"],
+    default: "pending",
+  },
+
+  agent: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Agent",
     required: true,
   },
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  },
 
-  tourUrl: {
-    type: String,
-  },
-  views: {
-    type: Number,
-    default: 0,
-  },
-  savedCount: {
-    type: Number,
-    default: 0,
-  },
-  isFeatured: {
-    type: Boolean,
-    default: false,
-  },
-  parking: {
-    totalSpaces: { type: Number, default: 0 },
-    features: [{ type: String }],
-    attachedGarageSpaces: { type: Number, default: 0 },
-    uncoveredSpaces: { type: Boolean, default: false },
-    parkingSize: { type: String },
-  },
-  lot: {
-    size: { type: Number },
-    dimensions: { type: String },
-    features: [{ type: String }],
-  },
-  construction: {
-    type: { type: String },
-    style: { type: String },
-    materials: [{ type: String }],
-    roof: [{ type: String }],
-    yearBuilt: { type: Number },
-  },
-  virtualSchema: [
-    {
-      key: { type: String, required: true },
-      value: { type: mongoose.Schema.Types.Mixed, required: true }, // Flexible value type
-    },
-  ],
+  views: { type: Number, default: 0 },
+  savedCount: { type: Number, default: 0 },
+  isFeatured: { type: Boolean, default: false },
+
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now },
 });
 
 export default mongoose.model("Property", PropertySchema);
