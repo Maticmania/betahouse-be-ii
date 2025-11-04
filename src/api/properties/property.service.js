@@ -35,6 +35,7 @@ export const calculatePreferenceScore = (property, user) => {
 
   if (!preferences) return score;
 
+  // Price range match
   if (preferences.priceRange) {
     if (
       property.price >= preferences.priceRange.min &&
@@ -44,6 +45,7 @@ export const calculatePreferenceScore = (property, user) => {
     }
   }
 
+  // Property type match
   if (
     preferences.propertyType &&
     preferences.propertyType.includes(property.propertyType)
@@ -51,15 +53,51 @@ export const calculatePreferenceScore = (property, user) => {
     score += 20;
   }
 
-  if (preferences.features) {
-    const matchedFeatures = property.features.filter((f) =>
-      preferences.features.includes(f)
-    );
-    score += matchedFeatures.length * 10;
+  // Category match (sale, rent, shortlet)
+  if (preferences.category && preferences.category === property.category) {
+    score += 15;
   }
 
+  // Property use match (residential, commercial, mixed-use)
+  if (
+    preferences.propertyUse &&
+    preferences.propertyUse.includes(property.propertyUse)
+  ) {
+    score += 15;
+  }
+
+  // Location match
+  if (preferences.locations) {
+    const locationMatch =
+      preferences.locations.includes(property.location?.state) ||
+      preferences.locations.includes(property.location?.city) ||
+      preferences.locations.includes(property.location?.lga);
+    if (locationMatch) score += 25;
+  }
+
+  // Facilities match
+  if (preferences.facilities && property.facilities) {
+    const matchedFacilities = property.facilities.filter((f) =>
+      preferences.facilities.includes(f)
+    );
+    score += matchedFacilities.length * 5;
+  }
+
+  // Bedrooms match
+  if (preferences.bedrooms && property.bedrooms >= preferences.bedrooms) {
+    score += 10;
+  }
+
+  // Boolean preferences
+  if (preferences.furnished && property.furnished) score += 10;
+  if (preferences.serviced && property.serviced) score += 10;
+  if (preferences.newProperty && property.newProperty) score += 10;
+  if (preferences.parkingRequired && property.parkingSpaces > 0) score += 8;
+
+  // Featured boost
   if (property.isFeatured) score += 50;
 
+  // Engagement metrics
   score += property.views * 0.1;
   score += property.savedCount * 0.5;
 
@@ -250,78 +288,92 @@ export const listPropertiesService = async (query, user) => {
     search,
     state,
     lga,
-    location,
+    city,
+    category,
     propertyType,
-    forSale,
+    propertyUse,
     bedrooms,
     bathrooms,
     minPrice,
     maxPrice,
-    minArea,
-    maxArea,
-    yearBuiltMin,
-    yearBuiltMax,
-    hasParking,
-    hasFireplace,
+    minLandSize,
+    maxLandSize,
+    parkingSpaces,
+    furnished,
+    serviced,
+    newProperty,
     isFeatured,
-    features,
+    facilities,
+    rentFrequency,
     sortBy = "score",
     sortOrder = "asc",
   } = query;
 
   const cacheKey = `properties:${JSON.stringify(query)}`;
   const cachedData = await redisClient.get(cacheKey);
+  
+  // Return cached data if available
+  if (cachedData) {
+    return JSON.parse(cachedData);
+  }
+
   const queryFilter = { status: { $in: ["available", "rented", "sold"] } };
   const orConditions = [];
 
+  // Category filter (sale, rent, shortlet)
+  if (category && category !== "all") queryFilter.category = category;
+
+  // Property type filter
   if (propertyType && propertyType !== "all")
     queryFilter.propertyType = propertyType;
-  if (state) queryFilter["address.state"] = state;
-  if (lga) queryFilter.lga = lga;
-  if (forSale !== undefined) queryFilter.forSale = forSale === "true";
 
-  if (bedrooms) queryFilter["details.bedrooms"] = { $gte: Number(bedrooms) };
-  if (bathrooms) queryFilter["details.bathrooms"] = { $gte: Number(bathrooms) };
+  // Property use filter (residential, commercial, mixed-use)
+  if (propertyUse && propertyUse !== "all")
+    queryFilter.propertyUse = propertyUse;
 
+  // Location filters
+  if (state) queryFilter["location.state"] = state;
+  if (lga) queryFilter["location.lga"] = lga;
+  if (city) queryFilter["location.city"] = city;
+
+  // Bedrooms and bathrooms filters
+  if (bedrooms) queryFilter.bedrooms = { $gte: Number(bedrooms) };
+  if (bathrooms) queryFilter.bathrooms = { $gte: Number(bathrooms) };
+
+  // Price range filter
   if (minPrice || maxPrice) {
     queryFilter.price = {};
     if (minPrice) queryFilter.price.$gte = Number(minPrice);
     if (maxPrice) queryFilter.price.$lte = Number(maxPrice);
   }
 
-  if (minArea || maxArea) {
-    queryFilter["details.area.totalStructure"] = {};
-    if (minArea)
-      queryFilter["details.area.totalStructure"].$gte = Number(minArea);
-    if (maxArea)
-      queryFilter["details.area.totalStructure"].$lte = Number(maxArea);
+  // Parking spaces filter
+  if (parkingSpaces !== undefined) {
+    queryFilter.parkingSpaces = { $gte: Number(parkingSpaces) };
   }
 
-  if (yearBuiltMin || yearBuiltMax) {
-    queryFilter["construction.yearBuilt"] = {};
-    if (yearBuiltMin)
-      queryFilter["construction.yearBuilt"].$gte = Number(yearBuiltMin);
-    if (yearBuiltMax)
-      queryFilter["construction.yearBuilt"].$lte = Number(yearBuiltMax);
-  }
-
-  if (hasParking !== undefined) {
-    queryFilter["parking.totalSpaces"] = hasParking === "true" ? { $gt: 0 } : 0;
-  }
-
-  if (hasFireplace !== undefined)
-    queryFilter["details.fireplace"] = hasFireplace === "true";
+  // Boolean filters
+  if (furnished !== undefined) queryFilter.furnished = furnished === "true";
+  if (serviced !== undefined) queryFilter.serviced = serviced === "true";
+  if (newProperty !== undefined) queryFilter.newProperty = newProperty === "true";
   if (isFeatured !== undefined) queryFilter.isFeatured = isFeatured === "true";
 
-  if (features) {
-    const featuresArray = Array.isArray(features)
-      ? features
-      : features.split(",").map((f) => f.trim());
-    if (featuresArray.length > 0) {
-      queryFilter.features = { $all: featuresArray };
+  // Rent frequency filter
+  if (rentFrequency && rentFrequency !== "all") {
+    queryFilter.rentFrequency = rentFrequency;
+  }
+
+  // Facilities filter
+  if (facilities) {
+    const facilitiesArray = Array.isArray(facilities)
+      ? facilities
+      : facilities.split(",").map((f) => f.trim());
+    if (facilitiesArray.length > 0) {
+      queryFilter.facilities = { $all: facilitiesArray };
     }
   }
 
+  // Search filter
   if (search) {
     orConditions.push(
       { title: { $regex: search, $options: "i" } },
@@ -329,15 +381,14 @@ export const listPropertiesService = async (query, user) => {
     );
   }
 
-  if (location) {
-    const regex = new RegExp(location, "i");
+  // Location search (across multiple fields)
+  if (query.location) {
+    const regex = new RegExp(query.location, "i");
     orConditions.push(
-      { "address.state": regex },
-      { "address.city": regex },
-      { "address.street": regex },
-      { "address.area": regex },
-      { lga: regex },
-      { town: regex }
+      { "location.state": regex },
+      { "location.city": regex },
+      { "location.lga": regex },
+      { "location.address": regex }
     );
   }
 
@@ -354,7 +405,7 @@ export const listPropertiesService = async (query, user) => {
   if (sortBy === "score" && userDoc) {
     let all = await Property.find(queryFilter)
       .populate({
-        path: "createdBy",
+        path: "agent",
         populate: { path: "user", select: "profile.name" },
       })
       .limit(200)
@@ -375,7 +426,7 @@ export const listPropertiesService = async (query, user) => {
   } else {
     properties = await Property.find(queryFilter)
       .populate({
-        path: "createdBy",
+        path: "agent",
         populate: { path: "user", select: "profile.name" },
       })
       .sort({ [sortBy]: sortDir })

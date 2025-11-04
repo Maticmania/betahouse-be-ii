@@ -1,29 +1,29 @@
 import express from "express";
-import { createProperty, saveAsDraft, publishProperty, getMyDrafts, updateProperty, deleteProperty, listProperties, getProperty, toggleWishlist, updatePropertyStatus, toggleFeatured, listMyProperties, searchProperties, getGeneralPropertyStats, getMyWishlist,getPropertyBySlug } from "./property.controller.js";
+import * as propertyController from "./property.controller.js";
 
 import { authenticate, restrictTo, optionalAuthenticate } from "../../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
-router.post("/", authenticate, restrictTo("agent"), createProperty);
-router.post("/draft", authenticate, restrictTo("agent"), saveAsDraft);
-router.put("/:propertyId/publish", authenticate, restrictTo("agent"), publishProperty);
-router.get("/drafts", authenticate, restrictTo("agent"), getMyDrafts);
-router.put("/:propertyId", authenticate, restrictTo("agent"), updateProperty);
-router.delete("/:propertyId", authenticate, restrictTo("agent", "admin"), deleteProperty);
+router.post("/", authenticate, restrictTo("agent"), propertyController.createProperty);
+router.post("/draft", authenticate, restrictTo("agent"), propertyController.saveAsDraft);
+router.put("/:propertyId/publish", authenticate, restrictTo("agent"), propertyController.publishProperty);
+router.get("/drafts", authenticate, restrictTo("agent"), propertyController.getMyDrafts);
+router.put("/:propertyId", authenticate, restrictTo("agent"), propertyController.updateProperty);
+router.delete("/:propertyId", authenticate, restrictTo("agent", "admin"), propertyController.deleteProperty);
 
-router.get("/", optionalAuthenticate, listProperties);
-router.get("/my", authenticate, restrictTo("agent", "admin"), listMyProperties);
-router.get("/slug/:slug", getPropertyBySlug);
-router.get("/:propertyId", optionalAuthenticate, getProperty);
+router.get("/", optionalAuthenticate, propertyController.listProperties);
+router.get("/my", authenticate, restrictTo("agent", "admin"), propertyController.listMyProperties);
+router.get("/slug/:slug", propertyController.getPropertyBySlug);
+router.get("/:propertyId", optionalAuthenticate, propertyController.getProperty);
 
-router.post("/:propertyId/wishlist", authenticate, toggleWishlist);
-router.get("/saved/my", authenticate, getMyWishlist);
+router.post("/:propertyId/wishlist", authenticate, propertyController.toggleWishlist);
+router.get("/saved/my", authenticate, propertyController.getMyWishlist);
 
-router.put("/:propertyId/status", authenticate, restrictTo("admin"), updatePropertyStatus);
-router.put("/:propertyId/featured", authenticate, restrictTo("admin"), toggleFeatured);
+router.put("/:propertyId/status", authenticate, restrictTo("admin"), propertyController.updatePropertyStatus);
+router.put("/:propertyId/featured", authenticate, restrictTo("admin"), propertyController.toggleFeatured);
 
-router.get("/search/advanced", optionalAuthenticate, searchProperties);
-router.get("/stats/general", getGeneralPropertyStats);
+router.get("/search/advanced", optionalAuthenticate, propertyController.searchProperties);
+router.get("/stats/general", propertyController.getGeneralPropertyStats);
 
 export default router;

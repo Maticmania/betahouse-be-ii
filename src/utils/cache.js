@@ -1,18 +1,23 @@
 import redisClient from "../config/redis.config.js";
 
-/** Helper: set cache with optional TTL (default 1 hour) */
-
 export const setCache = async (key, value, ttl = 3600) => {
-  const stringValue = value;
-  if (typeof redisClient.setEx === "function") {
-    await redisClient.setEx(key, ttl, stringValue);
-  } else {
-    await redisClient.set(key, stringValue, "EX", ttl);
+  try {
+    if (typeof redisClient.setEx === "function") {
+      await redisClient.setEx(key, ttl, value);
+    } else {
+      await redisClient.set(key, value, "EX", ttl);
+    }
+  } catch (err) {
+    console.error(`Failed to cache data for key ${key}:`, err.message);
   }
 };
 
-/** Helper: safely get cache */
 export const getCache = async (key) => {
-  const data = await redisClient.get(key);
-  return data ? JSON.parse(data) : null;
+  try {
+    const data = await redisClient.get(key);
+    return data ? JSON.parse(data) : null;
+  } catch (err) {
+    console.error(`Failed to retrieve cache for key ${key}:`, err.message);
+    return null;
+  }
 };

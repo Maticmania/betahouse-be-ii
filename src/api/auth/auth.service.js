@@ -75,7 +75,7 @@ const signup = async (userData, req) => {
     onlineUsers,
     user._id,
     "system",
-    `Welcome ${user.profile.name || "User"}! We\'re excited to have you onboard.`,
+    `Welcome ${user.profile.name || "User"}! We\'re excited to have you onboard.`, // Note: Escaped apostrophe here
     null,
     "Welcome to BetaHouse 🎉",
     "System"
@@ -86,7 +86,7 @@ const signup = async (userData, req) => {
     onlineUsers,
     user._id,
     "system",
-    `Please verify your email to unlock all features on BetaHouse.`,
+    `Please verify your email to unlock all features on BetaHouse.`, 
     null,
     "Verify Your Email ✉️",
     "System"
@@ -115,7 +115,7 @@ const verifyEmail = async (token, io, onlineUsers) => {
     onlineUsers,
     user._id,
     "system",
-    `Your email has been verified. You now have full access to all features.`,
+    `Your email has been verified. You now have full access to all features.`, 
     null,
     "Email Verified ✅",
     "System"
