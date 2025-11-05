@@ -16,6 +16,8 @@ router.get("/", optionalAuthenticate, propertyController.listProperties);
 router.get("/my", authenticate, restrictTo("agent", "admin"), propertyController.listMyProperties);
 router.get("/slug/:slug", propertyController.getPropertyBySlug);
 router.get("/:propertyId", optionalAuthenticate, propertyController.getProperty);
+router.get("/:propertyId/similar", optionalAuthenticate, propertyController.getSimilarProperties);
+router.get("/:propertyId/analytics", authenticate, restrictTo("agent", "admin"), propertyController.getPropertyAnalytics);
 
 router.post("/:propertyId/wishlist", authenticate, propertyController.toggleWishlist);
 router.get("/saved/my", authenticate, propertyController.getMyWishlist);

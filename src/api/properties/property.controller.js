@@ -222,6 +222,29 @@ const getGeneralPropertyStats = async (req, res) => {
   }
 };
 
+const getSimilarProperties = async (req, res) => {
+  try {
+    const { propertyId } = req.params;
+    const { limit } = req.query;
+    const properties = await propertyService.getSimilarPropertiesService(propertyId, limit);
+    res.status(200).json({ properties });
+  } catch (error) {
+    console.error("Error fetching similar properties:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+const getPropertyAnalytics = async (req, res) => {
+  try {
+    const { propertyId } = req.params;
+    const analytics = await propertyService.getPropertyAnalyticsService(propertyId);
+    res.status(200).json({ analytics });
+  } catch (error) {
+    console.error("Error fetching property analytics:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
 export {
   createProperty,
   saveAsDraft,
@@ -239,4 +262,6 @@ export {
   listMyProperties,
   getGeneralPropertyStats,
   searchProperties,
+  getSimilarProperties,
+  getPropertyAnalytics,
 };

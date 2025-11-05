@@ -294,7 +294,6 @@ export const listPropertiesService = async (query, user) => {
     propertyUse,
     bedrooms,
     bathrooms,
-    toilets,
     minPrice,
     maxPrice,
     minLandSize,
@@ -338,9 +337,8 @@ export const listPropertiesService = async (query, user) => {
   if (city) queryFilter["location.city"] = city;
 
   // Bedrooms and bathrooms filters
-  if (bedrooms) queryFilter.bedrooms = Number(bedrooms);
-  if (bathrooms) queryFilter.bathrooms = Number(bathrooms);
-  if (toilets) queryFilter.toilets = Number(toilets);
+  if (bedrooms) queryFilter.bedrooms = { $gte: Number(bedrooms) };
+  if (bathrooms) queryFilter.bathrooms = { $gte: Number(bathrooms) };
 
   // Price range filter
   if (minPrice || maxPrice) {
