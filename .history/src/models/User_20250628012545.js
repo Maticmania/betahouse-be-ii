@@ -81,7 +81,7 @@ const UserSchema = new mongoose.Schema({
     },
     features: { type: [String] },
   },
-  wishlist: [{ type: String }],
+  wishlist: [{ type: mongoose.Schema.Types.ObjectId, ref: "Property" }],
   role: {
     type: String,
     enum: ["user", "agent", "admin"],

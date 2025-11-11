@@ -148,7 +148,7 @@ const toggleWishlist = async (req, res) => {
   try {
     const { propertyId } = req.params;
     const wishlist = await propertyService.toggleWishlistService(req.user._id, propertyId);
-    res.status(200).json({ message: "Wishlist updated", isWishlisted: wishlist });
+    res.status(200).json({ message: "Wishlist updated", iswic wishlist });
   } catch (error) {
     res.status(500).json({ message: "Server error", error: error.message });
   }

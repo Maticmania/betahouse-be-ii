@@ -573,7 +573,7 @@ export const toggleWishlistService = async (userId, propertyId) => {
   await user.save();
   await property.save();
 
-  return isWishlisted;
+  return  isWishlisted ;
 };
 
 
