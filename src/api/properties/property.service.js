@@ -4,7 +4,8 @@ import Agent from "../../models/Agent.js";
 import User from "../../models/User.js";
 import redisClient from "../../config/redis.config.js";
 import { createNotification } from "../../services/notification.js";
-import { setCache } from "../../utils/cache.js";
+import { setCache, getCache } from "../../utils/cache.js";
+import { cloudinary } from "../../config/cloudinary.config.js";
 
 const generatePropertyId = () => {
   return `BH-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
@@ -102,6 +103,27 @@ export const calculatePreferenceScore = (property, user) => {
   score += property.savedCount * 0.5;
 
   return score;
+};
+
+const trackUserPreference = async (userId, property) => {
+  if (!userId || !property) return;
+
+  const key = `user:preferences:${userId}`;
+  const multi = redisClient.multi();
+
+  if (property.location?.state) {
+    multi.zincrby(key, 3, `location:${property.location.state}`);
+  }
+  if (property.propertyType) {
+    multi.zincrby(key, 2, `type:${property.propertyType}`);
+  }
+  if (property.bedrooms) {
+    multi.zincrby(key, 1, `bedrooms:${property.bedrooms}`);
+  }
+  // Add other preferences as needed, e.g., price range, category, etc.
+
+  await multi.exec();
+  await redisClient.expire(key, 60 * 60 * 24 * 30); // 30 days expiration
 };
 
 export const saveAsDraftService = async (data, agent) => {
@@ -202,7 +224,9 @@ export const updatePropertyService = async (
   userRole,
   updateData
 ) => {
-  const property = await Property.findOne({ propertyId: { $regex: new RegExp(`^${propertyId}$`, "i") } });
+  const property = await Property.findOne({
+    propertyId: { $regex: new RegExp(`^${propertyId}$`, "i") },
+  });
 
   if (!property) {
     throw new Error("Property not found");
@@ -312,7 +336,7 @@ export const listPropertiesService = async (query, user) => {
 
   const cacheKey = `properties:${JSON.stringify(query)}`;
   const cachedData = await redisClient.get(cacheKey);
-  
+
   // Return cached data if available
   if (cachedData) {
     return JSON.parse(cachedData);
@@ -357,7 +381,8 @@ export const listPropertiesService = async (query, user) => {
   // Boolean filters
   if (furnished !== undefined) queryFilter.furnished = furnished === "true";
   if (serviced !== undefined) queryFilter.serviced = serviced === "true";
-  if (newProperty !== undefined) queryFilter.newProperty = newProperty === "true";
+  if (newProperty !== undefined)
+    queryFilter.newProperty = newProperty === "true";
   if (isFeatured !== undefined) queryFilter.isFeatured = isFeatured === "true";
 
   // Rent frequency filter
@@ -431,7 +456,7 @@ export const listPropertiesService = async (query, user) => {
         path: "agent",
         populate: { path: "user", select: "profile.name" },
       })
-      .sort({ [sortBy]: sortDir })
+      // .sort({ [sortBy]: sortDir })
       .skip((page - 1) * limit)
       .limit(Number(limit))
       .lean();
@@ -446,7 +471,7 @@ export const listPropertiesService = async (query, user) => {
     pages: Math.ceil(total / limit),
   };
 
-  await redisClient.set(cacheKey, JSON.stringify(response), "EX", 600);
+  await setCache(cacheKey, response, 600);
 
   return response;
 };
@@ -511,7 +536,6 @@ export const getPropertyBySlugService = async (slug, ip) => {
   return property;
 };
 
-
 export const getPropertyService = async (propertyId, user, ip) => {
   const property = await Property.findOne({ propertyId }).populate({
     path: "agent",
@@ -539,6 +563,10 @@ export const getPropertyService = async (propertyId, user, ip) => {
       if (!hasViewed) {
         await Property.updateOne({ propertyId }, { $inc: { views: 1 } });
         await redisClient.set(redisKey, "1", "EX", 86400); // cache 24h
+      }
+      // Track user preference
+      if (user && user._id) {
+        await trackUserPreference(user._id.toString(), property);
       }
     }
 
@@ -575,7 +603,6 @@ export const toggleWishlistService = async (userId, propertyId) => {
 
   return isWishlisted;
 };
-
 
 export const getMyWishlistService = async (userId) => {
   const user = await User.findById(userId).populate({
@@ -757,7 +784,9 @@ export const getPropertyAnalyticsService = async (propertyId) => {
   const cached = await redisClient.get(cacheKey);
   if (cached) return JSON.parse(cached);
 
-  const property = await Property.findOne({ propertyId }).select("views savedCount");
+  const property = await Property.findOne({ propertyId }).select(
+    "views savedCount"
+  );
   if (!property) {
     throw new Error("Property not found");
   }
@@ -766,6 +795,107 @@ export const getPropertyAnalyticsService = async (propertyId) => {
   await setCache(cacheKey, JSON.stringify(analytics), 600);
 
   return analytics;
+};
+
+export const getTrendingProperties = async (limit = 20) => {
+  const cacheKey = `properties:trending`;
+  const cached = await redisClient.get(cacheKey);
+  if (cached) return JSON.parse(cached);
+
+  const trendingProperties = await Property.find({ status: "available" })
+    .sort({ views: -1, savedCount: -1 })
+    .limit(limit)
+    .lean();
+
+  await setCache(cacheKey, trendingProperties, 3600);
+  return trendingProperties;
+};
+
+export const buildPersonalizedQuery = async (userId) => {
+  const key = `user:preferences:${userId}`;
+  const topPrefs = await redisClient.zrevrange(key, 0, 4, "WITHSCORES"); // Get top 5 preferences
+
+  const query = { status: "available" };
+  const orConditions = [];
+  const preferenceValues = {
+    location: [],
+    type: [],
+    bedrooms: [],
+  };
+
+  if (topPrefs.length > 0) {
+    for (let i = 0; i < topPrefs.length; i += 2) {
+      const [pref, score] = [topPrefs[i], parseFloat(topPrefs[i + 1])];
+      const [prefType, prefValue] = pref.split(":");
+
+      if (preferenceValues[prefType]) {
+        preferenceValues[prefType].push(prefValue);
+      }
+    }
+
+    if (preferenceValues.location.length > 0) {
+      orConditions.push({
+        "location.state": { $in: preferenceValues.location },
+      });
+      orConditions.push({
+        "location.city": { $in: preferenceValues.location },
+      });
+      orConditions.push({ "location.lga": { $in: preferenceValues.location } });
+    }
+    if (preferenceValues.type.length > 0) {
+      orConditions.push({ propertyType: { $in: preferenceValues.type } });
+    }
+    if (preferenceValues.bedrooms.length > 0) {
+      // Assuming bedrooms preference means at least that many bedrooms
+      orConditions.push({
+        bedrooms: { $gte: Math.min(...preferenceValues.bedrooms.map(Number)) },
+      });
+    }
+  }
+
+  if (orConditions.length > 0) {
+    query.$or = orConditions;
+  } else {
+    // Fallback for new users or no preferences
+    // This will be handled in the controller by calling getTrendingProperties
+    return {}; // Return empty query to indicate no personalized preferences
+  }
+
+  return query;
+};
+
+export const getPersonalizedProperties = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const cacheKey = `properties:feed:${userId}`;
+
+    // Try cache
+    const cached = await getCache(cacheKey);
+    if (cached) return res.json(cached);
+
+    const query = await buildPersonalizedQuery(userId);
+    let properties;
+
+    if (!query || Object.keys(query).length === 0) {
+      properties = await getTrendingProperties();
+    } else {
+      properties = await Property.find(query)
+        .limit(20)
+        .populate({
+          path: "agent",
+          populate: { path: "user", select: "profile.name" },
+        })
+        .lean();
+    }
+
+    // Cache the result — using your helper
+    await setCache(cacheKey, properties);
+
+    return res.json(properties);
+  } catch (error) {
+    console.error("getPersonalizedProperties error:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
 };
 
 export const deletePropertyImageService = async (propertyId, imageId) => {

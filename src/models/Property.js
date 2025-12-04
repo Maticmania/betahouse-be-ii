@@ -90,6 +90,7 @@ const PropertySchema = new mongoose.Schema({
   views: { type: Number, default: 0 },
   savedCount: { type: Number, default: 0 },
   isFeatured: { type: Boolean, default: false },
+  floorPlans: [{ url: String, publicId: String }],
 
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },

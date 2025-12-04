@@ -1,5 +1,6 @@
 import * as propertyService from "./property.service.js";
 
+
 const saveAsDraft = async (req, res) => {
   try {
     const property = await propertyService.saveAsDraftService(req.body, req.agent);
@@ -76,6 +77,11 @@ const deleteProperty = async (req, res) => {
 
 const listProperties = async (req, res) => {
   try {
+    // If user is authenticated, use personalized properties
+    // if (req.user && req.user.id) {
+    //   return propertyService.getPersonalizedProperties(req, res);
+    // }
+    // Otherwise, use the existing listPropertiesService
     const response = await propertyService.listPropertiesService(req.query, req.user);
     return res.status(200).json(response);
   } catch (error) {
