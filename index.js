@@ -1,11 +1,14 @@
 import './src/config/env.js';
 import express from 'express';
 import cors from 'cors';
+import cookieParser from "cookie-parser";
 import morgan from 'morgan';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import http from "http";
 import { Server } from "socket.io";
+
+//config
 import { connectDB } from './src/config/db.config.js';
 import passport from './src/config/passport.config.js';
 
@@ -20,6 +23,7 @@ import uploadRoutes from './src/routes/upload.routes.js';
 
 const app = express();
 const server = http.createServer(app);
+app.use(cookieParser());
 
 const PORT = process.env.PORT || 6000;
 const MONGO_URI = process.env.MONGO_URI;
@@ -31,7 +35,6 @@ connectDB(MONGO_URI);
 const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:3001",
-  "http://localhost:5000",
   "https://yourfrontend.com",
 ];
 

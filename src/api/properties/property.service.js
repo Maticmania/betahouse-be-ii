@@ -321,8 +321,6 @@ export const listPropertiesService = async (query, user) => {
     toilets,
     minPrice,
     maxPrice,
-    minLandSize,
-    maxLandSize,
     parkingSpaces,
     furnished,
     serviced,
@@ -679,39 +677,107 @@ export const toggleFeaturedService = async (propertyId, io, onlineUsers) => {
 
 export const searchPropertiesService = async (query) => {
   const {
-    keyword,
+    city,
     state,
-    lga,
+    propertyType,
+    bedrooms,
+    bathrooms,
     minPrice,
     maxPrice,
-    propertyType,
-    location,
-    rentFrequency,
-    legalDocuments,
+    minLandSize,
+    maxLandSize,
+    furnished,
+    serviced,
+    minParkingSpaces,
+    maxParkingSpaces,
+    amenities,
+    sort,
+    page = 1,
+    limit = 10,
   } = query;
-  const cacheKey = `property:search:${keyword || "_"}:${state || "_"}:${
-    lga || "_"
-  }:${location || "_"}:${minPrice || 0}:${maxPrice || "_"}:${
-    propertyType || "_"
-  }`;
 
-  const cached = await redisClient.get(cacheKey);
-  if (cached) return JSON.parse(cached);
+  const pageNumber = parseInt(page, 10);
+  const limitNumber = parseInt(limit, 10);
+  const skip = (pageNumber - 1) * limitNumber;
 
   const queryFilter = { status: { $in: ["available", "rented", "sold"] } };
-  if (state) queryFilter["location.state"] = state;
-  if (lga) queryFilter["location.lga"] = lga;
+
+  if (city) queryFilter["location.city"] = new RegExp(city, "i");
+  if (state) queryFilter["location.state"] = new RegExp(state, "i");
   if (propertyType) queryFilter.propertyType = propertyType;
-  if (minPrice || maxPrice) queryFilter.price = {};
-  if (minPrice) queryFilter.price.$gte = Number(minPrice);
-  if (maxPrice) queryFilter.price.$lte = Number(maxPrice);
-  if (keyword) queryFilter.$text = { $search: keyword };
 
-  const properties = await Property.find(queryFilter).lean();
+  if (bedrooms) queryFilter.bedrooms = { $gte: parseInt(bedrooms, 10) };
+  if (bathrooms) queryFilter.bathrooms = { $gte: parseInt(bathrooms, 10) };
 
-  await redisClient.set(cacheKey, JSON.stringify({ properties }), "EX", 600);
+  if (minPrice || maxPrice) {
+    queryFilter.price = {};
+    if (minPrice) queryFilter.price.$gte = parseInt(minPrice, 10);
+    if (maxPrice) queryFilter.price.$lte = parseInt(maxPrice, 10);
+  }
 
-  return properties;
+  if (furnished !== undefined) queryFilter.furnished = furnished === "true";
+  if (serviced !== undefined) queryFilter.serviced = serviced === "true";
+
+  if (minParkingSpaces || maxParkingSpaces) {
+    queryFilter.parkingSpaces = {};
+    if (minParkingSpaces)
+      queryFilter.parkingSpaces.$gte = parseInt(minParkingSpaces, 10);
+    if (maxParkingSpaces)
+      queryFilter.parkingSpaces.$lte = parseInt(maxParkingSpaces, 10);
+  }
+
+  if (amenities) {
+    const amenitiesArray = Array.isArray(amenities) ? amenities : [amenities];
+    queryFilter.facilities = { $all: amenitiesArray };
+  }
+
+  let sortCriteria = { createdAt: -1 }; // Default sort to newest
+  if (sort) {
+    switch (sort) {
+      case "price_asc":
+        sortCriteria = { price: 1 };
+        break;
+      case "price_desc":
+        sortCriteria = { price: -1 };
+        break;
+      case "newest":
+        sortCriteria = { createdAt: -1 };
+        break;
+      case "oldest":
+        sortCriteria = { createdAt: 1 };
+        break;
+      // Add other sorting options as needed
+      default:
+        sortCriteria = { createdAt: -1 };
+    }
+  }
+
+  const propertiesPromise = Property.find(queryFilter)
+    .sort(sortCriteria)
+    .skip(skip)
+    .limit(limitNumber)
+    .populate({
+      path: "agent",
+      select: "firstName lastName phone email", // Select fields from agent
+    })
+    .lean();
+
+  const totalPromise = Property.countDocuments(queryFilter);
+
+  const [properties, total] = await Promise.all([propertiesPromise, totalPromise]);
+
+  const totalPages = Math.ceil(total / limitNumber);
+  const hasNextPage = pageNumber < totalPages;
+  const hasPrevPage = pageNumber > 1;
+
+  return {
+    properties,
+    total,
+    page: pageNumber,
+    totalPages,
+    hasNextPage,
+    hasPrevPage,
+  };
 };
 
 export const getGeneralPropertyStatsService = async () => {
@@ -862,40 +928,6 @@ export const buildPersonalizedQuery = async (userId) => {
   }
 
   return query;
-};
-
-export const getPersonalizedProperties = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const cacheKey = `properties:feed:${userId}`;
-
-    // Try cache
-    const cached = await getCache(cacheKey);
-    if (cached) return res.json(cached);
-
-    const query = await buildPersonalizedQuery(userId);
-    let properties;
-
-    if (!query || Object.keys(query).length === 0) {
-      properties = await getTrendingProperties();
-    } else {
-      properties = await Property.find(query)
-        .limit(20)
-        .populate({
-          path: "agent",
-          populate: { path: "user", select: "profile.name" },
-        })
-        .lean();
-    }
-
-    // Cache the result — using your helper
-    await setCache(cacheKey, properties);
-
-    return res.json(properties);
-  } catch (error) {
-    console.error("getPersonalizedProperties error:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
-  }
 };
 
 export const deletePropertyImageService = async (propertyId, imageId) => {

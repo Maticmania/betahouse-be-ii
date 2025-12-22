@@ -106,7 +106,7 @@ const verifyEmail = async (token, io, onlineUsers) => {
   await Notification.deleteMany({
     user: user._id,
     type: "system",
-    title: "Verify Your Email ✉️",
+    title: "Verify Your Email",
     read: false,
   });
 

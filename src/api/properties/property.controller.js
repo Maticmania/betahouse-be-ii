@@ -1,9 +1,11 @@
 import * as propertyService from "./property.service.js";
 
-
 const saveAsDraft = async (req, res) => {
   try {
-    const property = await propertyService.saveAsDraftService(req.body, req.agent);
+    const property = await propertyService.saveAsDraftService(
+      req.body,
+      req.agent
+    );
     res.status(201).json({ message: "Property saved as draft", property });
   } catch (error) {
     console.error(error);
@@ -67,7 +69,11 @@ const updateProperty = async (req, res) => {
 const deleteProperty = async (req, res) => {
   try {
     const { propertyId } = req.params;
-    await propertyService.deletePropertyService(propertyId, req.agent._id, req.user.role);
+    await propertyService.deletePropertyService(
+      propertyId,
+      req.agent._id,
+      req.user.role
+    );
 
     res.status(200).json({ message: "Property deleted" });
   } catch (error) {
@@ -77,12 +83,11 @@ const deleteProperty = async (req, res) => {
 
 const listProperties = async (req, res) => {
   try {
-    // If user is authenticated, use personalized properties
-    // if (req.user && req.user.id) {
-    //   return propertyService.getPersonalizedProperties(req, res);
-    // }
     // Otherwise, use the existing listPropertiesService
-    const response = await propertyService.listPropertiesService(req.query, req.user);
+    const response = await propertyService.listPropertiesService(
+      req.query,
+      req.user
+    );
     return res.status(200).json(response);
   } catch (error) {
     console.error("listProperties error:", error);
@@ -103,13 +108,21 @@ const getMyDrafts = async (req, res) => {
 
 const listMyProperties = async (req, res) => {
   try {
+    // Check if req.agent exists before accessing _id
+    if (req.user.role === "agent" && !req.agent) {
+      return res.status(400).json({ message: "Agent profile is missing" });
+    }
+
+    const agentId = req.agent ? req.agent._id : null;
+
     const response = await propertyService.listMyPropertiesService(
-      req.agent._id,
+      agentId,
       req.user.role,
       req.query
     );
     res.status(200).json(response);
   } catch (error) {
+    console.error("listMyProperties error:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
@@ -135,7 +148,11 @@ const getProperty = async (req, res) => {
   try {
     const { propertyId } = req.params;
     const ip = req.headers["x-forwarded-for"] || req.connection.remoteAddress;
-    const property = await propertyService.getPropertyService(propertyId, req.user, ip);
+    const property = await propertyService.getPropertyService(
+      propertyId,
+      req.user,
+      ip
+    );
 
     if (!property) {
       return res
@@ -153,8 +170,13 @@ const getProperty = async (req, res) => {
 const toggleWishlist = async (req, res) => {
   try {
     const { propertyId } = req.params;
-    const wishlist = await propertyService.toggleWishlistService(req.user._id, propertyId);
-    res.status(200).json({ message: "Wishlist updated", isWishlisted: wishlist });
+    const wishlist = await propertyService.toggleWishlistService(
+      req.user._id,
+      propertyId
+    );
+    res
+      .status(200)
+      .json({ message: "Wishlist updated", isWishlisted: wishlist });
   } catch (error) {
     res.status(500).json({ message: "Server error", error: error.message });
   }
@@ -207,16 +229,6 @@ const toggleFeatured = async (req, res) => {
   }
 };
 
-const searchProperties = async (req, res) => {
-  try {
-    const properties = await propertyService.searchPropertiesService(req.query);
-    res.status(200).json({ properties });
-  } catch (error) {
-    console.error("Error searching properties:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
-  }
-};
-
 const getGeneralPropertyStats = async (req, res) => {
   try {
     const stats = await propertyService.getGeneralPropertyStatsService();
@@ -232,7 +244,10 @@ const getSimilarProperties = async (req, res) => {
   try {
     const { propertyId } = req.params;
     const { limit } = req.query;
-    const properties = await propertyService.getSimilarPropertiesService(propertyId, limit);
+    const properties = await propertyService.getSimilarPropertiesService(
+      propertyId,
+      limit
+    );
     res.status(200).json({ properties });
   } catch (error) {
     console.error("Error fetching similar properties:", error);
@@ -243,7 +258,9 @@ const getSimilarProperties = async (req, res) => {
 const getPropertyAnalytics = async (req, res) => {
   try {
     const { propertyId } = req.params;
-    const analytics = await propertyService.getPropertyAnalyticsService(propertyId);
+    const analytics = await propertyService.getPropertyAnalyticsService(
+      propertyId
+    );
     res.status(200).json({ analytics });
   } catch (error) {
     console.error("Error fetching property analytics:", error);
@@ -267,7 +284,6 @@ export {
   toggleFeatured,
   listMyProperties,
   getGeneralPropertyStats,
-  searchProperties,
   getSimilarProperties,
   getPropertyAnalytics,
 };
