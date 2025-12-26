@@ -43,7 +43,10 @@ const UserSchema = new mongoose.Schema({
   },
   profile: {
     name: { type: String },
-    photo: { type: String }, // Cloudinary URL
+    photo: {
+      url: { type: String },
+      publicId: { type: String },
+    },
     state: { type: String },
     gender: {
       type: String,

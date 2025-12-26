@@ -28,10 +28,10 @@ app.use(cookieParser());
 const PORT = process.env.PORT || 6000;
 const MONGO_URI = process.env.MONGO_URI;
 
-// ✅ MongoDB connection
+// MongoDB connection
 connectDB(MONGO_URI);
 
-// ✅ Middleware
+// Middleware
 const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:3001",
@@ -59,7 +59,7 @@ app.use(rateLimit({
 }));
 app.use(passport.initialize());
 
-// ✅ Socket.IO setup
+//Socket.IO setup
 const io = new Server(server, {
   cors: {
     origin: allowedOrigins,
@@ -72,18 +72,18 @@ const io = new Server(server, {
 const onlineUsers = new Map();
 
 io.on("connection", (socket) => {
-  console.log("⚡ User connected:", socket.id);
+  console.log("User connected:", socket.id);
 
   socket.on("register", (userId) => {
     onlineUsers.set(userId, socket.id);
-    console.log(`✅ User ${userId} registered with socket ${socket.id}`);
+    console.log(`User ${userId} registered with socket ${socket.id}`);
   });
 
   socket.on("disconnect", () => {
     for (const [userId, sId] of onlineUsers.entries()) {
       if (sId === socket.id) onlineUsers.delete(userId);
     }
-    console.log("❌ User disconnected:", socket.id);
+    console.log("User disconnected:", socket.id);
   });
 });
 
@@ -91,12 +91,12 @@ io.on("connection", (socket) => {
 app.set("io", io);
 app.set("onlineUsers", onlineUsers);
 
-// ✅ Base route
-app.get('/', (req, res) => {
+//Base route
+app.get('/', (res) => {
   res.send('Betahouse Real Estate API running...');
 });
 
-// ✅ API Routes
+// API Routes
 app.use('/api/v2/auth', authRoutes);
 app.use('/api/v2/properties', propertyRoutes);
 app.use('/api/v2/notifications', notificationRoutes);
@@ -105,8 +105,8 @@ app.use('/api/v2/users', userRoutes);
 app.use('/api/v2/agents', agentRoutes);
 app.use('/api/v2/upload', uploadRoutes);
 
-// ✅ 404 handler
-app.use((req, res) => {
+// 404 handler
+app.use((res) => {
   res.status(404).json({ message: 'Route not found' });
 });
 
